@@ -1,0 +1,4 @@
+
+- normalize spherical tensors to preserve Hermitian property
+- option to specify fixed tensor components
+- test CoCO3 for SR school

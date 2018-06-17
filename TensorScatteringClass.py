@@ -1,18 +1,17 @@
 import sys, pprint
 from copy import deepcopy
-#from numpy import *
 from numpy.linalg import inv
 from numpy.random import rand
-#from scipy.misc import *
-
+from scipy.misc import factorial
 import numpy as np
-
+from numpy.linalg import det, norm
+import matplotlib.pyplot as plt
+try:
+    import CifFile
+except:
+    print "=== You need to install the PyCifRW module and add it to the Python path.\n=== Use pip install PyCifRW or visit https://pypi.org/project/PyCifRW/"
 #sys.path.append('/home/spc93/python/PyCifRW-3.1.2')
 #sys.path.append('/media/DCF0769CF0767D18/python/PyCifRW-3.1.2')
-import CifFile
-import matplotlib.pyplot as plt
-np.set_printoptions(precision=3, suppress=True)
-
 
 class TensorScatteringClass():  
     '''
@@ -24,13 +23,21 @@ class TensorScatteringClass():
         equiv_sites     compute symmetry-equivalent sites for selected site
         invert          inverts current spacegroup operators and sites
         isGroup(sg)     Returns True if sg forms a group or False and shows message if not (self.isGroup(self.sglist) should return True)
+        print_tensors() Display crystal/atomic/structure factor spherical/Cartesian tensors
+        CalculateIntensityInPolarizationChannels    calculate four intensity channels vs psi
+        PlotIntensityInPolarizationChannels        plot sigma or pi intensity vs azimuthal angle
+        
     Useful parameters:
         lattice
         B
         sglist
         pglist
         crystalpglist
+        Ts_crystal, Ts_atom, Fs (spherical tensors)
+        Tc_crystal, Tc_atom, Fc (spherical tensors) 
+        
     '''
+
 
     def __init__(self, CIFfile=None, Site=None, TimeEven=False):
         if CIFfile==None:
@@ -41,10 +48,13 @@ class TensorScatteringClass():
         firstkey = self.cif_obj.keys()[0]; cb = self.cifblock=self.cif_obj[firstkey]
         self.lattice = [float(cb['_cell_length_a'].partition('(')[0]), float(cb['_cell_length_b'].partition('(')[0]), float(cb['_cell_length_c'].partition('(')[0]), float(cb['_cell_angle_alpha'].partition('(')[0]), float(cb['_cell_angle_beta'].partition('(')[0]), float(cb['_cell_angle_gamma'].partition('(')[0])]
         self.all_labels=', '.join(cb['_atom_site_label'])
-        if Site==None:  #stop here if no site specified
+        
+        try:
+            self.atom_index = cb['_atom_site_label'].index(Site)
+        except:
+            print "=== Error: site keyword string must be in the atomic site list: " + self.all_labels
             return
-            
-        self.atom_index = cb['_atom_site_label'].index(Site)
+        
         self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index]), float(cb['_atom_site_fract_y'][self.atom_index]), float(cb['_atom_site_fract_z'][self.atom_index])])
 
         try:
@@ -65,7 +75,7 @@ class TensorScatteringClass():
         
         self.pglist= self.site_sym(self.sglist, self.sitevec)   #point group of site
         self.crystalpglist = self.crystal_point_sym(self.sglist)
-        
+        print self.__repr__()
                 
     def __repr__(self):
         if self.Site==None:
@@ -83,17 +93,12 @@ class TensorScatteringClass():
         + (self.fmt+'%i') % ('No. of pg ops for crystal', len(self.crystalpglist)) \
 
 
-    def TensorCalc(self, hkl=np.array([0,0,0]), hkln=np.array([0,0,1]), calctype=None, K=None, Parity=+1, Time=+1):
+    def TensorCalc(self, hkl=np.array([0,0,0]), K=None, Parity=+1, Time=+1):
         '''
         hkl, hkln:   hkl values for reflection and azimuthal reference
-        calctype:    keyword argument ('tensor', 'magnetic')
         '''
-        if calctype==None:
-            raise ValueError('=== Must give calculation type using calctype keyword')
         self.K = K
         self.hkl = hkl
-        self.hkln = hkln
-        self.calctype = calctype
         self.Parity = Parity
         self.Time = Time
         
@@ -105,64 +110,751 @@ class TensorScatteringClass():
         
         outstr += self.SF_symmetry(self.sitevec, self.hkl, self.sglist)
         
-        if calctype == 'tensor':
-            
-            #populate tensor with random complex numbers that satisfy the requirements for a Hermitian tensor
-            self.Ts=list(np.zeros(2*self.K+1))
-            self.Ts[self.K]=rand()
-            for Qp in range(1,self.K+1):
-                Qn=-Qp; 
-                rndr=rand(); rndi=rand();
-                self.Ts[K-Qp]=rndr+rndi*1.J;
-                self.Ts[K+Qp]=(-1)**Qp*(rndr-rndi*1.J);
+        #populate tensor with random complex numbers that satisfy the requirements for a Hermitian tensor
+        self.Ts=list(np.zeros(2*self.K+1))
+        self.Ts[self.K]=rand()
+        for Qp in range(1,self.K+1):
+            Qn=-Qp; 
+            rndr=rand(); rndi=rand();
+            self.Ts[K-Qp]=rndr+rndi*1.J;
+            self.Ts[K+Qp]=(-1)**Qp*(rndr-rndi*1.J);
         
-            Tc1=self.spherical_to_cart_tensor(self.Ts)   #convert to cartesian tensor of same rank
-        
-        
-        
-        
-#           +(self.fmt+'%i') % ('Tensor rank K', self.K) \
-        
-#        if K>=0:
-#    print 'Tensor calculation'
-#    Ts=list(rand(2*K+1));     #use random numbers for quick and dirty solution... (replace each element with 2K+1 element list in future)
-#    #Ts=[0.123456+0.392957*1.J, 0.836836+0.296849*1.J, 1, -0.836836+0.296849*1.J,  0.123456-0.392957*1.J]; #fixed pseudo random K=2 (Te etc)
-#
-#    #############
-#    for Qp in range(1,K+1): #next four optional lines modify previous line to adopt Brouder's relationship between tensor components
-#        Qn=-Qp; rndr=rand(); rndi=rand();
-#        Ts[K-Qp]=rndr+rndi*1.J;
-#        Ts[K+Qp]=(-1)**Qp*(rndr-rndi*1.J);
-#    #############
-#
-#    Tc1=spherical_to_cart_tensor(Ts)   #convert to cartesian tensor of same rank
-#    #Tc1=rand(3,3); print 'XXXXXX remove this line! generate random cartesian K=2 tensor'
-#    Tc_atom=apply_sym(Tc1, pglist, B, P=parity, T=time);  #apply site symmetry using site point group ops and B matrix
-#    Tc_crystal=apply_sym(Tc1, crystalpglist, B, P=parity, T=time);  #apply site symmetry using crystal point group ops and B matrix
-#    Fc=norm_array(calc_SF(Tc1, sitevec, hkl, sglist, B, P=parity, T=time));   #calc SF Crt tensor using crystal space group and B matrix
-#    
-#    #######for diagnostics
-#    #for sym_phase in sym_phases[0]:
-#    #   mat=sym_phase[0]; phases=sym_phase[1];
-#    #    #print mat; print  mean(phases); print dot(mat, mat); print;
-#    #   print mat; print phases; print;
-#    #print sym_phases[0]
-#    ##################
-#    Ts_atom=norm_array(cart_to_spherical_tensor(Tc_atom));    #atomic spherical tensor
-#    print 'Atomic spherical tensor:'; print Ts_atom
-#    Ts_crystal=norm_array(cart_to_spherical_tensor(Tc_crystal));    #crystal spherical tensor
-#    print 'Bulk crystal spherical tensor:'; print Ts_crystal
-#    Fs=norm_array(cart_to_spherical_tensor(Fc));    #SF spherical tensor
-#    print 'Structure factor spherical tensor:'; print Fs
-        
-        
+        self.Tc1=self.spherical_to_cart_tensor(self.Ts)   #convert to cartesian tensor of same rank
+        self.Tc_atom=self.apply_sym(self.Tc1, self.pglist, self.B, P=Parity, T=Time);  #apply site symmetry using site point group ops and B matrix
+        self.Tc_crystal=self.apply_sym(self.Tc1, self.crystalpglist, self.B, P=Parity, T=Time);  #apply site symmetry using crystal point group ops and B matrix
+        self.Fc=self.norm_array(self.calc_SF(self.Tc1, self.sitevec, self.hkl, self.sglist, self.B, P=Parity, T=Time));   #calc SF Crt tensor using crystal space group and B matrix
+        self.Ts_atom=self.norm_array(self.cart_to_spherical_tensor(self.Tc_atom));    #atomic spherical tensor
+        self.Ts_crystal=self.norm_array(self.cart_to_spherical_tensor(self.Tc_crystal));    #crystal spherical tensor
+        self.Fs=self.norm_array(self.cart_to_spherical_tensor(self.Fc));    #SF spherical tensor
 
+        print outstr
+        return
+
+    def calcXrayVectors(self, lam, psi, hkl, hkln):
+        '''
+        calculate relevant Cartesian vector in sample reference frame
+        return(h, q0, q1, esig, e0pi, e1pi)
+        '''
+        self.theta = theta = np.arcsin(lam*norm(np.dot(self.B, hkl))/2)
+
+        h=x=np.array([1,0,0])
+        q0=np.array([-np.sin(theta), np.cos(theta),0])
+        q1=np.array([np.sin(theta),np.cos(theta),0])
+        esig=z=np.array([0,0,1])
+        epi0=np.array([np.cos(theta),np.sin(theta),0])
+        epi1=np.array([np.cos(theta),-np.sin(theta),0])
+        y=np.array([0,1,0])
+         
+        Uctheta=self.theta_to_cartesian(hkl,hkln,psi,self.B)
+        
+        h_c=x_c=np.dot(Uctheta, h)
+        q0_c=np.dot(Uctheta,q0)
+        q1_c=np.dot(Uctheta,q1)
+        esig_c=z_c=np.dot(Uctheta,esig)
+        e0pi_c=np.dot(Uctheta,epi0)
+        e1pi_c=np.dot(Uctheta,epi1)
+        y_c=np.dot(Uctheta,y)
+        
+        return(h_c, q0_c, q1_c, esig_c, e0pi_c, e1pi_c) 
+
+
+    def Xtensor(self, process, rank, time, parity, e0, e1, q0, q1):
+        '''
+        Calculates resonant scattering tensor as per Lovesey
+        This version is a dump of the output of a Mathematica implementation (hence messy!)
+        The Sympy version of this calculation carries out the same tensor calculation 
+        '''
+        [e0x, e0y, e0z]=e0
+        [e1x, e1y, e1z]=e1
+        [q0x, q0y, q0z]=q0
+        [q1x, q1y, q1z]=q1
+
+        Complex=self.Complex    #make it easier to convert Mathematica Fortran output
+        Sqrt=self.Sqrt
+
+        if process=='E1E1' and rank==2 and parity==1:
+            X2=np.array([
+            ((e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y))/2.,
+            (e0z*(e1x-Complex(0,1)*e1y)+(e0x-Complex(0,1)*e0y)*e1z)/2.,
+            -((e0x*e1x+e0y*e1y-2*e0z*e1z)/Sqrt(6)),
+            (-(e0z*e1x)-Complex(0,1)*e0z*e1y-e0x*e1z-Complex(0,1)*e0y*e1z)/2.,
+            ((e0x+Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y))/2.
+            ])
+            return X2
+        if process=='E1E2' and rank==3 and parity==-1:
+            #E1E2 rank 3
+            n3t=np.array([
+            ((e0x-Complex(0,1)*e0y)*(Complex(0,1)*e1x+e1y)*
+            (q0x-Complex(0,1)*q0y))/(2.*Sqrt(10)),
+            (e0z*(Complex(0,1)*e1x+e1y)*(q0x-Complex(0,1)*q0y)+
+            (Complex(0,1)*e0x+e0y)*
+            (e1z*(q0x-Complex(0,1)*q0y)+(e1x-Complex(0,1)*e1y)*q0z))/
+            (2.*Sqrt(15)),(Complex(0,0.1)*
+            (-((e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*
+            (q0x-Complex(0,1)*q0y))+
+            4*e1z*(e0z*(q0x-Complex(0,1)*q0y)+
+            (e0x-Complex(0,1)*e0y)*q0z)-
+            2*(e1x-Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6),
+            (Complex(0,-0.2)*(e0x*e1z*q0x+e0y*e1z*q0y+e0x*e1x*q0z+
+            e0y*e1y*q0z+e0z*(e1x*q0x+e1y*q0y-2*e1z*q0z)))/Sqrt(2),
+            (Complex(0,0.1)*((e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*
+            (q0x+Complex(0,1)*q0y)-
+            4*e1z*(e0z*(q0x+Complex(0,1)*q0y)+
+            (e0x+Complex(0,1)*e0y)*q0z)+
+            2*(e1x+Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6),
+            (Complex(0,0.5)*(e0z*(e1x+Complex(0,1)*e1y)*(q0x+Complex(0,1)*q0y)+
+            (e0x+Complex(0,1)*e0y)*
+            (e1z*(q0x+Complex(0,1)*q0y)+(e1x+Complex(0,1)*e1y)*q0z)))/
+            Sqrt(15),((e0x+Complex(0,1)*e0y)*(Complex(0,-1)*e1x+e1y)*
+            (q0x+Complex(0,1)*q0y))/(2.*Sqrt(10))
+            ])
+            n3=np.array([
+            ((e0x-Complex(0,1)*e0y)*(Complex(0,1)*e1x+e1y)*
+            (q1x-Complex(0,1)*q1y))/(2.*Sqrt(10)),
+            (e0z*(Complex(0,1)*e1x+e1y)*(q1x-Complex(0,1)*q1y)+
+            (Complex(0,1)*e0x+e0y)*
+            (e1z*(q1x-Complex(0,1)*q1y)+(e1x-Complex(0,1)*e1y)*q1z))/
+            (2.*Sqrt(15)),(Complex(0,0.1)*
+            (-((e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*
+            (q1x-Complex(0,1)*q1y))+
+            4*e0z*(e1z*(q1x-Complex(0,1)*q1y)+
+            (e1x-Complex(0,1)*e1y)*q1z)-
+            2*(e0x-Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6),
+            (Complex(0,-0.2)*(e0x*e1z*q1x+e0y*e1z*q1y+e0x*e1x*q1z+
+            e0y*e1y*q1z+e0z*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(2),
+            (Complex(0,0.1)*((e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*
+            (q1x+Complex(0,1)*q1y)-
+            4*e0z*(e1z*(q1x+Complex(0,1)*q1y)+
+            (e1x+Complex(0,1)*e1y)*q1z)+
+            2*(e0x+Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6),
+            (Complex(0,0.5)*(e0z*(e1x+Complex(0,1)*e1y)*(q1x+Complex(0,1)*q1y)+
+            (e0x+Complex(0,1)*e0y)*
+            (e1z*(q1x+Complex(0,1)*q1y)+(e1x+Complex(0,1)*e1y)*q1z)))/
+            Sqrt(15),((e0x+Complex(0,1)*e0y)*(Complex(0,-1)*e1x+e1y)*
+            (q1x+Complex(0,1)*q1y))/(2.*Sqrt(10))
+            ])
+            if time==1:
+                return n3t-n3
+            elif time==-1:
+                return  n3t+n3
+        if process=='E1E2' and rank==2 and parity==-1:
+            #E1E2 rank 2
+            n2t=np.array([(e0z*(Complex(0,1)*e1x+e1y)*(q0x-Complex(0,1)*q0y)+(e0x-Complex(0,1)*e0y)*(Complex(0,-2)*e1z*q0x-2*e1z*q0y+Complex(0,1)*e1x*q0z+e1y*q0z))/(2.*Sqrt(30)),(e0z*(Complex(0,-1)*e1z*q0x-e1z*q0y+Complex(0,2)*e1x*q0z+2*e1y*q0z)+e0y*(Complex(0,1)*e1y*q0x+e1x*(q0x-Complex(0,2)*q0y)-e1z*q0z)+e0x*(-2*e1y*q0x+e1x*q0y+Complex(0,1)*e1y*q0y-Complex(0,1)*e1z*q0z))/(2.*Sqrt(30)),(-(e0z*e1y*q0x)+e0z*e1x*q0y+e0y*e1x*q0z-e0x*e1y*q0z)/(2.*Sqrt(5)),(e0z*(Complex(0,-1)*e1z*q0x+e1z*q0y+Complex(0,2)*e1x*q0z-2*e1y*q0z)+e0x*(2*e1y*q0x-e1x*q0y+Complex(0,1)*e1y*q0y-Complex(0,1)*e1z*q0z)+e0y*(Complex(0,1)*e1y*q0x-e1x*(q0x+Complex(0,2)*q0y)+e1z*q0z))/(2.*Sqrt(30)),(e0z*(Complex(0,-1)*e1x+e1y)*(q0x+Complex(0,1)*q0y)+(e0x+Complex(0,1)*e0y)*(Complex(0,2)*e1z*q0x-2*e1z*q0y-Complex(0,1)*e1x*q0z+e1y*q0z))/(2.*Sqrt(30))])
+            n2=np.array([(Complex(0,-2)*e0z*(e1x-Complex(0,1)*e1y)*(q1x-Complex(0,1)*q1y)+(Complex(0,1)*e0x+e0y)*(e1z*(q1x-Complex(0,1)*q1y)+(e1x-Complex(0,1)*e1y)*q1z))/(2.*Sqrt(30)),(Complex(0,-1)*e0z*(e1z*q1x-Complex(0,1)*e1z*q1y+e1x*q1z-Complex(0,1)*e1y*q1z)+e0x*(e1y*q1x+e1x*q1y-Complex(0,2)*e1y*q1y+Complex(0,2)*e1z*q1z)+e0y*(-2*e1x*q1x+Complex(0,1)*e1y*q1x+Complex(0,1)*e1x*q1y+2*e1z*q1z))/(2.*Sqrt(30)),(-(e0y*(e1z*q1x+e1x*q1z))+e0x*(e1z*q1y+e1y*q1z))/(2.*Sqrt(5)),(e0z*(Complex(0,-1)*e1z*q1x+e1z*q1y-Complex(0,1)*e1x*q1z+e1y*q1z)+e0y*(2*e1x*q1x+Complex(0,1)*e1y*q1x+Complex(0,1)*e1x*q1y-2*e1z*q1z)-e0x*(e1y*q1x+e1x*q1y+Complex(0,2)*e1y*q1y-Complex(0,2)*e1z*q1z))/(2.*Sqrt(30)),(Complex(0,2)*e0z*(e1x+Complex(0,1)*e1y)*(q1x+Complex(0,1)*q1y)+(Complex(0,-1)*e0x+e0y)*(e1z*(q1x+Complex(0,1)*q1y)+(e1x+Complex(0,1)*e1y)*q1z))/(2.*Sqrt(30))])
+            if time==1:
+                return n2t-n2
+            elif time==-1:
+                return  n2t+n2
+        if process=='E1E2' and rank==1 and parity==-1:
+            #E1E2 rank 1
+            print "xxxxx E1E2 rank 1 not tested"
+            n1t=np.array([(Complex(0,0.1)*(-3*(e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*(q0x-Complex(0,1)*q0y)-3*e1z*(e0z*(q0x-Complex(0,1)*q0y)+(e0x-Complex(0,1)*e0y)*q0z)-(e1x-Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6),(Complex(0,-0.1)*(-2*e0x*e1z*q0x-2*e0y*e1z*q0y+3*e0x*e1x*q0z+3*e0y*e1y*q0z+e0z*(3*e1x*q0x+3*e1y*q0y+4*e1z*q0z)))/Sqrt(3),(Complex(0,0.1)*(3*(e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*(q0x+Complex(0,1)*q0y)+3*e1z*(e0z*(q0x+Complex(0,1)*q0y)+(e0x+Complex(0,1)*e0y)*q0z)+(e1x+Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6)])
+            n1=np.array([(Complex(0,0.1)*(-3*(e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*(q1x-Complex(0,1)*q1y)-3*e0z*(e1z*(q1x-Complex(0,1)*q1y)+(e1x-Complex(0,1)*e1y)*q1z)-(e0x-Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6),(Complex(0,0.1)*(-3*(e0x*e1z*q1x+e0y*e1z*q1y+e0x*e1x*q1z+e0y*e1y*q1z)+2*e0z*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(3),(Complex(0,0.1)*(3*(e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*(q1x+Complex(0,1)*q1y)+3*e0z*(e1z*(q1x+Complex(0,1)*q1y)+(e1x+Complex(0,1)*e1y)*q1z)+(e0x+Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6)])
+            if time==1:
+                return n1t-n1
+            elif time==-1:
+                return  n1t+n1
+    
+        if process=='E2E2' and rank==0 and parity==1 and time==1:
+            XQQ0=np.array([(e0y*(3*e1y*q0x*q1x-2*e1x*q0y*q1x+3*e1x*q0x*q1y+4*e1y*q0y*q1y+
+    3*e1z*q0z*q1y-2*e1z*q0y*q1z+3*e1y*q0z*q1z)+
+    e0z*(3*e1z*q0x*q1x-2*e1x*q0z*q1x+3*e1z*q0y*q1y-2*e1y*q0z*q1y+
+    3*e1x*q0x*q1z+3*e1y*q0y*q1z+4*e1z*q0z*q1z)+
+    e0x*(3*e1y*q0y*q1x+3*e1z*q0z*q1x-2*e1y*q0x*q1y-2*e1z*q0x*q1z+
+    e1x*(4*q0x*q1x+3*q0y*q1y+3*q0z*q1z)))/(6.*Sqrt(5))])
+            return XQQ0
+        if process=='E2E2' and rank==1 and parity==1 and time==-1:
+            XQQ1=np.array([(e0x*(-2*e1x*q0z*q1x+Complex(0,1)*e1y*q0z*q1x+
+    Complex(0,1)*e1x*q0z*q1y+2*e1x*q0x*q1z-
+    Complex(0,1)*e1x*q0y*q1z+e1y*q0y*q1z+
+    e1z*(2*q0x*q1x-Complex(0,1)*q0y*q1x+q0y*q1y+2*q0z*q1z))-
+    Complex(0,1)*e0y*(Complex(0,-1)*e1y*q0z*q1x-
+    Complex(0,1)*e1x*q0z*q1y-2*e1y*q0z*q1y+e1x*q0x*q1z+
+    Complex(0,1)*e1y*q0x*q1z+2*e1y*q0y*q1z+
+    e1z*(q0x*q1x+Complex(0,1)*q0x*q1y+2*q0y*q1y+2*q0z*q1z))-
+    e0z*(e1x*(2*q0x*q1x-Complex(0,1)*q0x*q1y+q0y*q1y+2*q0z*q1z)-
+    Complex(0,1)*(2*e1z*(Complex(0,1)*q0z*q1x+q0z*q1y-
+    Complex(0,1)*q0x*q1z-q0y*q1z)+
+    e1y*(q0x*q1x+Complex(0,1)*q0y*q1x+2*q0y*q1y+2*q0z*q1z))))/
+    (4.*Sqrt(5)),(Complex(0,0.5)*
+    (e0z*(e1z*q0y*q1x-e1z*q0x*q1y-e1y*q0x*q1z+e1x*q0y*q1z)-
+    e0x*(2*e1y*q0x*q1x-2*e1x*q0y*q1x+2*e1x*q0x*q1y+
+    2*e1y*q0y*q1y+e1z*q0z*q1y+e1y*q0z*q1z)+
+    e0y*(2*e1y*q0y*q1x+e1z*q0z*q1x-2*e1y*q0x*q1y+
+    e1x*(2*q0x*q1x+2*q0y*q1y+q0z*q1z))))/Sqrt(10),
+    (e0x*(e1x*(-2*q0z*q1x-Complex(0,1)*q0z*q1y+2*q0x*q1z+
+    Complex(0,1)*q0y*q1z)+e1y*(Complex(0,-1)*q0z*q1x+q0y*q1z)+
+    e1z*(2*q0x*q1x+Complex(0,1)*q0y*q1x+q0y*q1y+2*q0z*q1z))-
+    e0z*(2*e1z*(q0z*(q1x+Complex(0,1)*q1y)-
+    (q0x+Complex(0,1)*q0y)*q1z)+
+    e1y*(Complex(0,1)*q0x*q1x+q0y*q1x+Complex(0,2)*q0y*q1y+
+    Complex(0,2)*q0z*q1z)+
+    e1x*(2*q0x*q1x+Complex(0,1)*q0x*q1y+q0y*q1y+2*q0z*q1z))+
+    e0y*(-(e1x*q0z*q1y)+Complex(0,1)*e1x*q0x*q1z+
+    e1y*(-(q0z*(q1x+Complex(0,2)*q1y))+
+    (q0x+Complex(0,2)*q0y)*q1z)+
+    e1z*(q0x*(Complex(0,1)*q1x+q1y)+
+    Complex(0,2)*(q0y*q1y+q0z*q1z))))/(4.*Sqrt(5))])
+            return XQQ1
+        if process=='E2E2' and rank==2 and parity==1 and time==1:
+            XQQ2=np.array([(e0z*(-3*e1z*(q0x-Complex(0,1)*q0y)*(q1x-Complex(0,1)*q1y)+
+    (e1x-Complex(0,1)*e1y)*
+    (4*q0z*q1x-Complex(0,4)*q0z*q1y-3*q0x*q1z+
+    Complex(0,3)*q0y*q1z))+
+    e0y*(e1z*(Complex(0,3)*q0z*q1x+3*q0z*q1y-Complex(0,4)*q0x*q1z-
+    4*q0y*q1z)+Complex(0,1)*e1x*
+    (2*q0x*q1x+2*q0y*q1y+3*q0z*q1z)+
+    e1y*(Complex(0,2)*q0y*q1x+Complex(0,2)*q0x*q1y+4*q0y*q1y+
+    3*q0z*q1z))+e0x*(e1x*
+    (-4*q0x*q1x+Complex(0,2)*q0y*q1x+Complex(0,2)*q0x*q1y-
+    3*q0z*q1z)+Complex(0,1)*
+    (e1z*(Complex(0,3)*q0z*q1x+3*q0z*q1y-Complex(0,4)*q0x*q1z-
+    4*q0y*q1z)+e1y*(2*q0x*q1x+2*q0y*q1y+3*q0z*q1z))))/
+    (4.*Sqrt(21)),(e0y*(e1y*(-3*q0z*q1x+Complex(0,2)*q0z*q1y-
+    3*q0x*q1z+Complex(0,2)*q0y*q1z)+
+    e1x*(Complex(0,-4)*q0z*q1x-3*q0z*q1y+Complex(0,3)*q0x*q1z+
+    4*q0y*q1z)+e1z*(Complex(0,3)*q0x*q1x+4*q0y*q1x-
+    3*q0x*q1y+Complex(0,2)*q0y*q1y+Complex(0,2)*q0z*q1z))-
+    e0x*(e1x*(2*q0z*q1x-Complex(0,3)*q0z*q1y+2*q0x*q1z-
+    Complex(0,3)*q0y*q1z)+
+    e1y*(Complex(0,-3)*q0z*q1x-4*q0z*q1y+Complex(0,4)*q0x*q1z+
+    3*q0y*q1z)+e1z*(Complex(0,-3)*q0y*q1x+
+    2*q0x*(q1x+Complex(0,2)*q1y)+3*q0y*q1y+2*q0z*q1z))+
+    e0z*(-2*e1z*(q0z*q1x-Complex(0,1)*q0z*q1y+q0x*q1z-
+    Complex(0,1)*q0y*q1z)+
+    e1y*(Complex(0,3)*q0x*q1x-3*q0y*q1x+4*q0x*q1y+
+    Complex(0,2)*q0y*q1y+Complex(0,2)*q0z*q1z)-
+    e1x*(2*q0x*q1x+Complex(0,4)*q0y*q1x-Complex(0,3)*q0x*q1y+
+    3*q0y*q1y+2*q0z*q1z)))/(4.*Sqrt(21)),
+    (e0y*(6*e1y*q0x*q1x-8*e1x*q0y*q1x+6*e1x*q0x*q1y+4*e1y*q0y*q1y-
+    3*e1z*q0z*q1y+4*e1z*q0y*q1z-3*e1y*q0z*q1z)-
+    e0z*(3*e1z*q0x*q1x-4*e1x*q0z*q1x+3*e1z*q0y*q1y-4*e1y*q0z*q1y+
+    3*e1x*q0x*q1z+3*e1y*q0y*q1z+8*e1z*q0z*q1z)+
+    e0x*(6*e1y*q0y*q1x-3*e1z*q0z*q1x-8*e1y*q0x*q1y+4*e1z*q0x*q1z+
+    e1x*(4*q0x*q1x+6*q0y*q1y-3*q0z*q1z)))/(6.*Sqrt(14)),
+    (e0y*(e1x*(Complex(0,-4)*q0z*q1x+3*q0z*q1y+Complex(0,3)*q0x*q1z-
+    4*q0y*q1z)+e1y*(3*q0z*q1x+Complex(0,2)*q0z*q1y+
+    3*q0x*q1z+Complex(0,2)*q0y*q1z)+
+    e1z*(-4*q0y*q1x+Complex(0,2)*q0y*q1y+
+    3*q0x*(Complex(0,1)*q1x+q1y)+Complex(0,2)*q0z*q1z))+
+    e0x*(e1x*(2*q0z*q1x+Complex(0,3)*q0z*q1y+2*q0x*q1z+
+    Complex(0,3)*q0y*q1z)+
+    e1y*(Complex(0,3)*q0z*q1x-4*q0z*q1y-Complex(0,4)*q0x*q1z+
+    3*q0y*q1z)+e1z*(Complex(0,3)*q0y*q1x+
+    2*q0x*(q1x-Complex(0,2)*q1y)+3*q0y*q1y+2*q0z*q1z))+
+    e0z*(2*e1z*(q0z*q1x+Complex(0,1)*q0z*q1y+q0x*q1z+
+    Complex(0,1)*q0y*q1z)+
+    e1y*(Complex(0,3)*q0x*q1x+3*q0y*q1x-4*q0x*q1y+
+    Complex(0,2)*q0y*q1y+Complex(0,2)*q0z*q1z)+
+    e1x*(2*q0x*q1x-Complex(0,4)*q0y*q1x+Complex(0,3)*q0x*q1y+
+    3*q0y*q1y+2*q0z*q1z)))/(4.*Sqrt(21)),
+    (Complex(0,-1)*(e0z*(3*e1z*(Complex(0,-1)*q0x+q0y)*
+    (q1x+Complex(0,1)*q1y)+
+    (e1x+Complex(0,1)*e1y)*
+    (Complex(0,4)*q0z*q1x-4*q0z*q1y-Complex(0,3)*q0x*q1z+
+    3*q0y*q1z))+e0y*
+    (e1z*(3*q0z*(q1x+Complex(0,1)*q1y)-
+    4*(q0x+Complex(0,1)*q0y)*q1z)+
+    e1y*(2*q0y*(q1x+Complex(0,2)*q1y)+2*q0x*q1y+
+    Complex(0,3)*q0z*q1z)+
+    e1x*(2*q0x*q1x+2*q0y*q1y+3*q0z*q1z)))-
+    e0x*(e1x*(4*q0x*q1x+Complex(0,2)*q0y*q1x+Complex(0,2)*q0x*q1y+
+    3*q0z*q1z)+Complex(0,1)*
+    (e1z*(Complex(0,-3)*q0z*q1x+3*q0z*q1y+Complex(0,4)*q0x*q1z-
+    4*q0y*q1z)+e1y*(2*q0x*q1x+2*q0y*q1y+3*q0z*q1z))))/
+    (4.*Sqrt(21))])
+            return XQQ2
+        if process=='E2E2' and rank==3 and parity==1 and time==-1:
+            XQQ3=np.array([(e0z*(e1x-Complex(0,1)*e1y)*(q0x-Complex(0,1)*q0y)*
+    (q1x-Complex(0,1)*q1y)-
+    (e0x-Complex(0,1)*e0y)*e1z*(q0x-Complex(0,1)*q0y)*
+    (q1x-Complex(0,1)*q1y)+
+    (e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*q0z*
+    (q1x-Complex(0,1)*q1y)-
+    (e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*
+    (q0x-Complex(0,1)*q0y)*q1z)/(4.*Sqrt(2)),
+    (Complex(0,0.25)*(Complex(0,-2)*e0z*(e1x-Complex(0,1)*e1y)*q0z*
+    (q1x-Complex(0,1)*q1y)+
+    e0y*(e1y*q0y*q1x-e1y*q0x*q1y+
+    e1x*(-(q0x*q1x)+Complex(0,2)*q0y*q1x+q0y*q1y)+
+    2*e1z*q0x*q1z-Complex(0,2)*e1z*q0y*q1z)+
+    e0x*(e1y*q0x*q1x-e1x*q0y*q1x+e1x*q0x*q1y-
+    Complex(0,2)*e1y*q0x*q1y-e1y*q0y*q1y+
+    Complex(0,2)*e1z*q0x*q1z+2*e1z*q0y*q1z)))/Sqrt(3),
+    (Complex(0,-1)*e0y*(e1x*(5*q0z*q1x-Complex(0,3)*q0z*q1y+
+    3*q0x*q1z-Complex(0,5)*q0y*q1z)+
+    e1y*(Complex(0,-3)*q0z*q1x-q0z*q1y+Complex(0,3)*q0x*q1z+
+    q0y*q1z)+e1z*(Complex(0,-5)*q0y*q1x+
+    3*q0x*(q1x+Complex(0,1)*q1y)+q0y*q1y-4*q0z*q1z))+
+    e0x*(e1x*(-(q0z*q1x)+Complex(0,3)*q0z*q1y+q0x*q1z-
+    Complex(0,3)*q0y*q1z)+
+    e1y*(Complex(0,3)*q0z*q1x+5*q0z*q1y+Complex(0,5)*q0x*q1z+
+    3*q0y*q1z)+e1z*(Complex(0,-3)*q0y*q1x+
+    q0x*(q1x+Complex(0,5)*q1y)+3*q0y*q1y-4*q0z*q1z))+
+    e0z*(4*e1z*(q0z*q1x-Complex(0,1)*q0z*q1y-q0x*q1z+
+    Complex(0,1)*q0y*q1z)-
+    e1x*(Complex(0,5)*q0y*q1x+q0x*(q1x-Complex(0,3)*q1y)+
+    3*q0y*q1y-4*q0z*q1z)+
+    e1y*(Complex(0,3)*q0x*q1x-3*q0y*q1x+5*q0x*q1y+
+    Complex(0,1)*q0y*q1y-Complex(0,4)*q0z*q1z)))/(4.*Sqrt(30)),
+    (Complex(0,0.5)*(2*e0z*(-(e1z*q0y*q1x)+e1z*q0x*q1y+e1y*q0x*q1z-
+    e1x*q0y*q1z)+e0y*(e1y*q0y*q1x-2*e1z*q0z*q1x-e1y*q0x*q1y+
+    e1x*(q0x*q1x+q0y*q1y-2*q0z*q1z))+
+    e0x*(e1x*q0y*q1x-e1x*q0x*q1y+2*e1z*q0z*q1y-
+    e1y*(q0x*q1x+q0y*q1y-2*q0z*q1z))))/Sqrt(10),
+    (Complex(0,1)*e0y*(e1x*(5*q0z*q1x+Complex(0,3)*q0z*q1y+3*q0x*q1z+
+    Complex(0,5)*q0y*q1z)+
+    e1y*(Complex(0,3)*q0z*q1x-q0z*q1y-Complex(0,3)*q0x*q1z+
+    q0y*q1z)+e1z*(Complex(0,5)*q0y*q1x+
+    3*q0x*(q1x-Complex(0,1)*q1y)+q0y*q1y-4*q0z*q1z))+
+    e0x*(e1x*(-(q0z*(q1x+Complex(0,3)*q1y))+
+    (q0x+Complex(0,3)*q0y)*q1z)+
+    e1y*(Complex(0,-3)*q0z*q1x+5*q0z*q1y-Complex(0,5)*q0x*q1z+
+    3*q0y*q1z)+e1z*(Complex(0,3)*q0y*q1x+
+    q0x*(q1x-Complex(0,5)*q1y)+3*q0y*q1y-4*q0z*q1z))-
+    e0z*(4*e1z*(-(q0z*(q1x+Complex(0,1)*q1y))+
+    (q0x+Complex(0,1)*q0y)*q1z)+
+    e1x*(Complex(0,-5)*q0y*q1x+q0x*(q1x+Complex(0,3)*q1y)+
+    3*q0y*q1y-4*q0z*q1z)+
+    e1y*(Complex(0,3)*q0x*q1x+3*q0y*q1x-5*q0x*q1y+
+    Complex(0,1)*q0y*q1y-Complex(0,4)*q0z*q1z)))/(4.*Sqrt(30)),
+    (Complex(0,0.25)*(Complex(0,2)*e0z*(e1x+Complex(0,1)*e1y)*q0z*
+    (q1x+Complex(0,1)*q1y)+
+    e0y*(e1y*q0y*q1x-e1y*q0x*q1y+
+    e1x*(-(q0x*q1x)-Complex(0,2)*q0y*q1x+q0y*q1y)+
+    2*e1z*q0x*q1z+Complex(0,2)*e1z*q0y*q1z)+
+    e0x*(e1y*q0x*q1x-e1x*q0y*q1x+e1x*q0x*q1y+
+    Complex(0,2)*e1y*q0x*q1y-e1y*q0y*q1y-
+    Complex(0,2)*e1z*q0x*q1z+2*e1z*q0y*q1z)))/Sqrt(3),
+    (e0z*(e1x+Complex(0,1)*e1y)*(q0x+Complex(0,1)*q0y)*
+    (q1x+Complex(0,1)*q1y)-
+    (e0x+Complex(0,1)*e0y)*(e1z*(q0x+Complex(0,1)*q0y)*
+    (q1x+Complex(0,1)*q1y)-
+    (e1x+Complex(0,1)*e1y)*
+    (q0z*(q1x+Complex(0,1)*q1y)-(q0x+Complex(0,1)*q0y)*q1z)))/
+    (4.*Sqrt(2))])
+            return XQQ3
+        if process=='E2E2' and rank==4 and parity==1 and time==1:
+            #nedit replace \n \r and ' ' with nothing.
+            #List((( -> array([(( and add square bracket after first round, also at end
+            XQQ4=np.array([((e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*
+    (q0x-Complex(0,1)*q0y)*(q1x-Complex(0,1)*q1y))/4.,
+    (e0z*(e1x-Complex(0,1)*e1y)*(q0x-Complex(0,1)*q0y)*
+    (q1x-Complex(0,1)*q1y)+
+    (e0x-Complex(0,1)*e0y)*e1z*(q0x-Complex(0,1)*q0y)*
+    (q1x-Complex(0,1)*q1y)+
+    (e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*q0z*
+    (q1x-Complex(0,1)*q1y)+
+    (e0x-Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*
+    (q0x-Complex(0,1)*q0y)*q1z)/(4.*Sqrt(2)),
+    (e0x*(e1x*(-2*q0x*q1x+Complex(0,1)*q0y*q1x+Complex(0,1)*q0x*q1y+
+    2*q0z*q1z)+Complex(0,1)*
+    (Complex(0,-2)*e1z*(q0z*q1x-Complex(0,1)*q0z*q1y+q0x*q1z-
+    Complex(0,1)*q0y*q1z)+e1y*(q0x*q1x+q0y*q1y-2*q0z*q1z))\
+    )+Complex(0,1)*(Complex(0,-2)*e0z*
+    (e1z*(q0x-Complex(0,1)*q0y)*(q1x-Complex(0,1)*q1y)+
+    (e1x-Complex(0,1)*e1y)*
+    (q0z*(q1x-Complex(0,1)*q1y)+(q0x-Complex(0,1)*q0y)*q1z))\
+    +e0y*(-2*e1z*(q0z*q1x-Complex(0,1)*q0z*q1y+q0x*q1z-
+    Complex(0,1)*q0y*q1z)+
+    e1x*(q0x*q1x+q0y*q1y-2*q0z*q1z)+
+    e1y*(q0y*q1x+q0x*q1y-Complex(0,2)*q0y*q1y+
+    Complex(0,2)*q0z*q1z))))/(4.*Sqrt(7)),
+    (-(e0x*(e1x*(3*q0z*q1x-Complex(0,1)*q0z*q1y+3*q0x*q1z-
+    Complex(0,1)*q0y*q1z)+
+    e1y*(Complex(0,-1)*q0z*q1x+q0z*q1y-Complex(0,1)*q0x*q1z+
+    q0y*q1z)+e1z*(3*q0x*q1x-Complex(0,1)*q0y*q1x-
+    Complex(0,1)*q0x*q1y+q0y*q1y-4*q0z*q1z)))-
+    e0z*(-4*e1z*(q0z*q1x-Complex(0,1)*q0z*q1y+q0x*q1z-
+    Complex(0,1)*q0y*q1z)+
+    e1x*(3*q0x*q1x-Complex(0,1)*q0y*q1x-Complex(0,1)*q0x*q1y+
+    q0y*q1y-4*q0z*q1z)+
+    e1y*(Complex(0,-1)*q0x*q1x+q0y*q1x+q0x*q1y-
+    Complex(0,3)*q0y*q1y+Complex(0,4)*q0z*q1z))-
+    e0y*(e1y*(q0z*q1x-Complex(0,3)*q0z*q1y+q0x*q1z-
+    Complex(0,3)*q0y*q1z)+
+    e1x*(Complex(0,-1)*q0z*q1x+q0z*q1y-Complex(0,1)*q0x*q1z+
+    q0y*q1z)+e1z*(q0y*q1x-Complex(0,3)*q0y*q1y+
+    q0x*(Complex(0,-1)*q1x+q1y)+Complex(0,4)*q0z*q1z)))/
+    (4.*Sqrt(14)),(e0y*(e1y*q0x*q1x+e1x*q0y*q1x+e1x*q0x*q1y+
+    3*e1y*q0y*q1y-4*e1z*q0z*q1y-4*e1z*q0y*q1z-4*e1y*q0z*q1z)-
+    4*e0z*(e1z*q0x*q1x+e1x*q0z*q1x+e1z*q0y*q1y+e1y*q0z*q1y+
+    e1x*q0x*q1z+e1y*q0y*q1z-2*e1z*q0z*q1z)+
+    e0x*(e1y*q0y*q1x-4*e1z*q0z*q1x+e1y*q0x*q1y-4*e1z*q0x*q1z+
+    e1x*(3*q0x*q1x+q0y*q1y-4*q0z*q1z)))/(2.*Sqrt(70)),
+    (e0x*(e1x*(3*q0z*q1x+Complex(0,1)*q0z*q1y+3*q0x*q1z+
+    Complex(0,1)*q0y*q1z)+
+    e1y*(Complex(0,1)*q0z*q1x+q0z*q1y+Complex(0,1)*q0x*q1z+
+    q0y*q1z)+e1z*(3*q0x*q1x+Complex(0,1)*q0y*q1x+
+    Complex(0,1)*q0x*q1y+q0y*q1y-4*q0z*q1z))+
+    e0z*(-4*e1z*(q0z*q1x+Complex(0,1)*q0z*q1y+q0x*q1z+
+    Complex(0,1)*q0y*q1z)+
+    e1x*(3*q0x*q1x+Complex(0,1)*q0y*q1x+Complex(0,1)*q0x*q1y+
+    q0y*q1y-4*q0z*q1z)+
+    e1y*(Complex(0,1)*q0x*q1x+q0y*q1x+q0x*q1y+
+    Complex(0,3)*q0y*q1y-Complex(0,4)*q0z*q1z))+
+    e0y*(e1y*(q0z*q1x+Complex(0,3)*q0z*q1y+q0x*q1z+
+    Complex(0,3)*q0y*q1z)+
+    e1x*(Complex(0,1)*q0z*q1x+q0z*q1y+Complex(0,1)*q0x*q1z+
+    q0y*q1z)+e1z*(q0y*q1x+Complex(0,3)*q0y*q1y+
+    q0x*(Complex(0,1)*q1x+q1y)-Complex(0,4)*q0z*q1z)))/
+    (4.*Sqrt(14)),(2*e0z*(e1z*(q0x+Complex(0,1)*q0y)*
+    (q1x+Complex(0,1)*q1y)+
+    (e1x+Complex(0,1)*e1y)*
+    (q0z*(q1x+Complex(0,1)*q1y)+(q0x+Complex(0,1)*q0y)*q1z))-
+    Complex(0,1)*e0y*(-2*e1z*
+    (q0z*q1x+Complex(0,1)*q0z*q1y+q0x*q1z+
+    Complex(0,1)*q0y*q1z)+e1x*(q0x*q1x+q0y*q1y-2*q0z*q1z)+
+    e1y*(q0y*q1x+q0x*q1y+Complex(0,2)*q0y*q1y-
+    Complex(0,2)*q0z*q1z))+
+    e0x*(-(e1x*(2*q0x*q1x+Complex(0,1)*q0y*q1x+
+    Complex(0,1)*q0x*q1y-2*q0z*q1z))-
+    Complex(0,1)*(Complex(0,2)*e1z*
+    (q0z*q1x+Complex(0,1)*q0z*q1y+q0x*q1z+
+    Complex(0,1)*q0y*q1z)+e1y*(q0x*q1x+q0y*q1y-2*q0z*q1z)))\
+    )/(4.*Sqrt(7)),(-(e0z*(e1x+Complex(0,1)*e1y)*(q0x+Complex(0,1)*q0y)*
+    (q1x+Complex(0,1)*q1y))-
+    (e0x+Complex(0,1)*e0y)*
+    (e1z*(q0x+Complex(0,1)*q0y)*(q1x+Complex(0,1)*q1y)+
+    (e1x+Complex(0,1)*e1y)*
+    (q0z*(q1x+Complex(0,1)*q1y)+(q0x+Complex(0,1)*q0y)*q1z)))/
+    (4.*Sqrt(2)),((e0x+Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*
+    (q0x+Complex(0,1)*q0y)*(q1x+Complex(0,1)*q1y))/4.])
+            return XQQ4
+        else:
+            raise ValueError('Unknown tensor type')
+
+    def Complex(self, a, b):          #allow FortranForm Mathematica output with only minor mods need to delete spaces, List( ... )->array([...])
+        return a+b*1j
+    
+    def Sqrt(self, a):
+        return np.sqrt(a)
+
+
+    def TensorScatteringMatrix(self, mpol, Fs, time, parity, esig_c, e0pi_c, e1pi_c, q0_c,  q1_c):
+        '''
+        Calculate 2x2 scattering amplitude matrix for tensor scattering
+        '''
+
+        K=(len(Fs)-1)/2 #get rank K from tensor size
+
+        X_ss=self.Xtensor(mpol, K, time, parity, esig_c, esig_c,  q0_c,  q1_c)
+        X_sp=self.Xtensor(mpol, K, time, parity, esig_c, e1pi_c,  q0_c,  q1_c)
+        X_ps=self.Xtensor(mpol, K, time, parity, e0pi_c, esig_c,  q0_c,  q1_c)
+        X_pp=self.Xtensor(mpol, K, time, parity, e0pi_c, e1pi_c,  q0_c,  q1_c)
+        
+        f_ss=self.scalar_contract(X_ss, Fs)
+        f_sp=self.scalar_contract(X_sp, Fs)
+        f_ps=self.scalar_contract(X_ps, Fs)
+        f_pp=self.scalar_contract(X_pp, Fs)
+        
+        
+        self.G=np.array([[f_ss,  f_ps], [f_sp,  f_pp]])    #scattering matrix
+        return self.G
+
+    def NonResonantMagneticScatteringMatrix(self, sk, lk, esig_c, e0pi_c, e1pi_c, q0_c,  q1_c):
+        '''
+        Calculate 2x2 scattering amplitude matrix for non-resonant magnetic scattering
+        spin and orbital components (complex) for reflection are sk, lk 
+        BB and AA are B (spin) and A (orbit) coupling vectors from SWL, Blume etc
+        '''
+        e0=esig_c; e1=esig_c;
+        BB=np.cross(e1,e0)+np.cross(q1_c,e1)*np.dot(q1_c,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)-np.cross(np.cross(q1_c,e1),np.cross(q0_c,e0))
+        AA=2*(1-np.dot(q0_c,q1_c))*np.cross(e1,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)+np.cross(q1_c,e1)*np.dot(q1_c,e0)
+        f_ss=1j*(np.dot(sk,BB)+np.dot(lk,AA)); 
+ 
+        e0=esig_c; e1=e1pi_c;
+        BB=np.cross(e1,e0)+np.cross(q1_c,e1)*np.dot(q1_c,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)-np.cross(np.cross(q1_c,e1),np.cross(q0_c,e0))
+        AA=2*(1-np.dot(q0_c,q1_c))*np.cross(e1,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)+np.cross(q1_c,e1)*np.dot(q1_c,e0)
+        f_sp=1j*(np.dot(sk,BB)+np.dot(lk,AA));
+        
+        e0=e0pi_c; e1=esig_c;
+        BB=np.cross(e1,e0)+np.cross(q1_c,e1)*np.dot(q1_c,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)-np.cross(np.cross(q1_c,e1),np.cross(q0_c,e0))
+        AA=2*(1-np.dot(q0_c,q1_c))*np.cross(e1,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)+np.cross(q1_c,e1)*np.dot(q1_c,e0)
+        f_ps=1j*(np.dot(sk,BB)+np.dot(lk,AA));
+        
+        e0=e0pi_c; e1=e1pi_c;
+        BB=np.cross(e1,e0)+np.cross(q1_c,e1)*np.dot(q1_c,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)-np.cross(np.cross(q1_c,e1),np.cross(q0_c,e0))
+        AA=2*(1-np.dot(q0_c,q1_c))*np.cross(e1,e0)-np.cross(q0_c,e0)*np.dot(q0_c,e1)+np.cross(q1_c,e1)*np.dot(q1_c,e0)
+        f_pp=1j*(np.dot(sk,BB)+np.dot(lk,AA)); 
+        
+        
+        self.G=np.array([[f_ss,  f_ps], [f_sp,  f_pp]])    #scattering matrix
+        return self.G
+
+
+
+    def E1E1ResonantMagneticScatteringMatrix(self, mk, esig_c, e0pi_c, e1pi_c, q0_c,  q1_c):
+        '''
+        Calculate 2x2 scattering amplitude matrix for E1E1 resonant magnetic scattering
+        '''
+        e0=esig_c; e1=esig_c;
+        E1E1=np.cross(e1,e0)
+        f_ss=1j*(np.dot(mk,E1E1));
+ 
+        e0=esig_c; e1=e1pi_c;
+        E1E1=np.cross(e1,e0)
+        f_sp=1j*(np.dot(mk,E1E1));
+
+        e0=e0pi_c; e1=esig_c;
+        E1E1=np.cross(e1,e0)
+        f_ps=1j*(np.dot(mk,E1E1));
+
+        e0=e0pi_c; e1=e1pi_c;
+        E1E1=np.cross(e1,e0)
+        f_pp=1j*(np.dot(mk,E1E1));
+        
+        self.G=np.array([[f_ss,  f_ps], [f_sp,  f_pp]])    #scattering matrix
+        return self.G
+
+
+
+    def CalculateIntensityInPolarizationChannels(self, process, lam, hkl, hkln, psideg, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None):
+        '''
+        Calculate intensity in four linear polarization channels
+        psi can be a scalar or array/list
+        '''
+
+        tensortypes=['E1E1','E1E2','E2E2']
+
+        assert process not in tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
+        assert process != 'E1E1mag' or mk != None, '=== Need keyword mk for E1E1 resonant magnetic scattering'
+        assert process != 'NonResmag' or (sk is not None and lk is not None), '=== Need keywords sk, lk (arrays) for non-resonant magnetic scattering'
+        
+        if process in tensortypes:
+            self.TensorCalc(K=K, hkl=hkl, Parity=Parity, Time=Time)
+        
+        try:
+            psi=[float(psideg)*np.pi/180]
+        except:
+            psi=np.array(psideg*np.pi/180)
+
+        Iss, Isp,Ips, Ipp = [], [], [],[]
+        for psival in psi:
+            
+            (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
+
+            if process in tensortypes:
+                self.Xtensor(process, K, Time, Parity, esig, e1pi, q0, q1)
+                G=self.TensorScatteringMatrix(process, self.Fs, Time, Parity, esig, e0pi, e1pi, q0,  q1)
+
+            elif process == 'E1E1mag':
+                G=self.E1E1ResonantMagneticScatteringMatrix(mk, esig, e0pi, e1pi, q0,  q1)
+                
+            elif process == 'NonResmag':
+                G=self.NonResonantMagneticScatteringMatrix(sk, lk, esig, e0pi, e1pi, q0,  q1)
+                    
+            else:
+                raise ValueError("== Don't know what to do with process type %s: " % process)
+        
+            Iss+=[abs(G[0,0])**2]; Isp+=[abs(G[1,0])**2]; Ips+=[abs(G[0,1])**2]; Ipp+=[abs(G[1,1])**2];
+
+        return (np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp))
+
+
+    def PlotIntensityInPolarizationChannels(self, process, lam, hkl, hkln, psideg=None, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None , sigmapi=None, savefile=None):
+        '''
+        Plot azimuthal dependence of sigma or pi intensity and save figure if savefile keyword string (fine name root) given
+        '''
+        assert sigmapi in ('sigma', 'pi'), "=== sigmapi keyword must be 'sigma' or 'pi'"
+
+        if psideg == None:
+            psideg = np.array(range(361))
+
+        Iss, Isp,Ips, Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
+
+        #sig-sig, sig-pi, sig-total
+        titlestr = process+' hkl=[%.1f, %.1f, %.1f]   $\psi_0$=[%.1f, %.1f, %.1f]' % (tuple(hkl)+tuple(hkln)) 
+
+        if sigmapi == 'sigma':
+            Ixs, Ixp, Itot, polchar = Iss, Isp, Iss + Isp, '\sigma'
+        elif sigmapi == 'pi':
+            Ixs, Ixp, Itot, polchar = Ips, Ipp, Ips + Ipp, '\pi'
+
+        plt.figure(); 
+        #plt.hold(True);
+        plt.plot(psideg, Itot, 'k',label='$\sigma$ Total',linewidth=2.0);
+        plt.plot(psideg, Ixs, 'r',label='$'+polchar+'\sigma$',linewidth=2.0);
+        plt.plot(psideg, Ixp, 'b',label='$'+polchar+'\pi$',linewidth=2.0); 
+        plt.legend(loc='best'); plt.ylabel('Intensity (aribtrary units)'); plt.axis('tight'); plt.xlabel('$\psi$ (degrees)'); plt.title(titlestr); plt.grid(1)
+        if max(abs(Itot)) < 1e-20:
+            plt.ylim([0,1])
+
+        if savefile != None:
+            plt.savefig('%s '+sigmapi+'.pdf' % savefile)
+
+
+    def theta_to_cartesian(self, hkl, hkln, psi, B):
+        '''
+        Unitary matrix for transformation from theta to cartesian coordinate system
+        '''
+        Rx=np.array([
+        [1, 0, 0],
+        [0, np.cos(psi), np.sin(psi)],
+        [0, -np.sin(psi), np.cos(psi)]
+        ])
+        
+        xp=np.dot(B, hkl)/norm(np.dot(B, hkl))
+        cp=np.cross(np.dot(B, hkl),np.dot(B, hkln));
+        zp=cp/norm(cp)
+        yp=np.cross(zp, xp);
+        Ucpsi=np.array([xp, yp, zp]).T;
+        Uctheta=np.dot(Ucpsi, Rx)
+        
+        return Uctheta
+
+    def scalar_contract(self, X, T):
+        if len(X)!=len(T):
+            raise ValueError("Can't form scalar contraction of tensors with different rank")
+        K=len(X)/2
+        scalar=0
+        for kk in range(len(X)):
+            q=kk-K
+            scalar+=(-1)**q * X[2*K-kk] * T[kk]
+        return scalar
+
+    def print_tensors(self):
+        np.set_printoptions(precision=3, suppress=True)
+        print '\nTensor components\n',\
+            self.fmt % 'Crystal (spherical)', self.Ts_crystal,\
+            self.fmt % 'Atom (spherical)', self.Ts_atom,\
+            self.fmt % 'Struct. factor (spherical)', self.Fs,\
+            '\n\nCrystal (Cartesian):\n\n', self.Tc_crystal,\
+            '\n\nAtom (Cartesian):\n\n', self.Tc_atom,\
+            '\n\nStruct. factor (Cartesian):\n\n', self.Fc, '\n'
 
     
-  
+    def cart_to_spherical_tensor(self, Tc):
+        K=len(Tc.shape); #Cartesian tensor rank
+        Cconj=self.StoneSphericalToCartConversionCoefs(K)
+        Ts=np.zeros(2*K+1, dtype=complex)
+        for kk in range(-K, K+1):
+            Ts[kk+K]=np.sum(Cconj[kk+K]*Tc)
+        return Ts
+    
+    
+    def apply_sym(self, Tensor, symop_list, Bmat=np.array([[1, 0, 0],[0,1,0],[0,0,1]]), P=None, T=+1):
+        #apply point sym ops in symop_list to tensor of rank K
+        #Optional Bmat is used to transform arrays to Cartesian from crystal basis
+        #Default time (T) sym +1; no default for parity (P)
+        Tnew=Tensor*0.0
+        for sym in symop_list:
+            tsign=T**((1-sym[1])/2) #sign change of time-odd tensor under time inversion
+            Tnew+=self.transform_cart(Tensor, self.crystal_to_cart_operator(sym[0], Bmat),P)*tsign
+        return Tnew
+
+    def norm_array(self, Array, Minval=0.001):
+        #Normalise array by largest abs value if >Minval (avoids trying to renormalise zero array)
+        greatest=0.0
+        flatarray=Array.flat
+        for i in range(len(flatarray)):
+            if abs(flatarray[i])>abs(greatest):
+                greatest=flatarray[i]
+        if abs(greatest)>Minval:
+            newarray=Array/greatest
+        else:
+            newarray=Array
+        return newarray
+
+    def calc_SF(self, Tensor, R, hkl, spacegroup_list, Bmat=np.array([[1, 0, 0],[0,1,0],[0,0,1]]), P=None, T=+1):
+        #calc structure factor tensor for symop_list to tensot T of rank K at position R hkl=Q
+        #Optional Bmat is used to transform arrays to Cartesian from crystal basis
+        Tnew=Tensor*0.0
+        for sym in spacegroup_list:
+            mat=sym[0]
+            vec=sym[1]
+            time=sym[2]
+            tsign=T**((1-time)/2) #sign change of time-odd tensor under time inversion
+            newR=np.dot(mat, R)+vec
+            phase=np.exp(np.pi*2.j * np.dot(hkl, newR))
+            newbit=self.transform_cart(Tensor, self.crystal_to_cart_operator(mat, Bmat),P)*phase*tsign
+            Tnew=Tnew+newbit
+        return Tnew
+
+
+    def transform_cart(self, T, S, P=0):
+        #transform Cart tensor rank K using symmetry operator S
+        #If optional parameter P (parity) is given then a correction is made to account for the otherwise incorrect
+        #tranformation of Cartesian tensors derived from spherical pseudotensors (see Mittelwihr paper)
+        d=3
+        k=len(T.shape); #rank of T
+        if P==0:
+            Sfac=1
+        elif P==1 or P==-1:
+            Sfac=det(S)**((3+P*(-1)**k)/2)
+        else:
+            raise ValueError('Parity should be +1 (even), -1 (odd) or 0 (ignored)')
+            
+        ##### delete next two lines - diagnostics only
+        if Sfac==-1:
+            print "===Applying sign change for pseudotensor transormation"
         
-        
-        return outstr
+        tnew=T*0.0;
+        if k==0:
+            tnew=T
+        elif k==1:
+            for i in range(d):
+                for ii in range(d):
+                    tnew[i]+=S[i, ii]*T[ii]
+        elif k==2:
+            for i in range(d):
+                for ii in range(d):
+                    for j in range(d):
+                        for jj in range(d):
+                            tnew[i, j]+=S[i, ii]*S[j, jj]*T[ii, jj]
+        elif k==3:
+            for i in range(d):
+                for ii in range(d):
+                    for j in range(d):
+                        for jj in range(d):
+                            for k in range(d):
+                                for kk in range(d):
+                                    tnew[i, j, k]+=S[i, ii]*S[j, jj]*S[k, kk]*T[ii, jj, kk]
+        elif k==4:
+            for i in range(d):
+                for ii in range(d):
+                    for j in range(d):
+                        for jj in range(d):
+                            for k in range(d):
+                                for kk in range(d):
+                                    for l in range(d):
+                                        for ll in range(d):
+                                            tnew[i, j, k, l]+=S[i, ii]*S[j, jj]*S[k, kk]*S[l, ll]*T[ii, jj, kk, ll]                             
+        elif k==5:
+            for i in range(d):
+                for ii in range(d):
+                    for j in range(d):
+                        for jj in range(d):
+                            for k in range(d):
+                                for kk in range(d):
+                                    for l in range(d):
+                                        for ll in range(d):
+                                            for m in range(d):
+                                                 for mm in range(d): 
+                                                     tnew[i, j, k, l, m]+=S[i, ii]*S[j, jj]*S[k, kk]*S[l, ll]*S[m, mm]*T[ii, jj, kk, ll, mm]                                        
+        elif k==6:
+            for i in range(d):
+                for ii in range(d):
+                    for j in range(d):
+                        for jj in range(d):
+                            for k in range(d):
+                                for kk in range(d):
+                                    for l in range(d):
+                                        for ll in range(d):
+                                            for m in range(d):
+                                                 for mm in range(d): 
+                                                     for n in range(d):
+                                                         for nn in range(d): 
+                                                             tnew[i, j, k, l, m, n]+=S[i, ii]*S[j, jj]*S[k, kk]*S[l, ll]*S[m, mm]*S[n, nn]*T[ii, jj, kk, ll, mm, nn]                                        
+        else:
+            raise ValueError('Tranformation for this tensor rank not coded: K=',k)
+        return tnew*Sfac   #Apply correction factor Sfac (+/-1)
+
+    def crystal_to_cart_operator(self, S, B):
+        pass
+        #transform crystal sym op to Cart sym op using B matrix
+        Snew=np.dot(inv(B.T),  np.dot(S, B.T));
+        return Snew
     
     def StoneSphericalToCartConversionCoefs(self, K,Calc=True,k=-1j):
         #Condon&Shortley phase convention (k=-i in Stone's paper)
@@ -170,22 +862,22 @@ class TensorScatteringClass():
         #If Calc==False then use these expressions from Mathematica, else calculate them numerically
         if not Calc:
             if K==0:
-                C=array(1.0)
+                C=np.array(1.0)
             elif K==1:
-                C=array(((Complex(0,1)/Sqrt(2),1/Sqrt(2),0),(0,0,Complex(0,1)), (Complex(0,-1)/Sqrt(2),1/Sqrt(2),0)))
+                C=np.array(((Complex(0,1)/Sqrt(2),1/Sqrt(2),0),(0,0,Complex(0,1)), (Complex(0,-1)/Sqrt(2),1/Sqrt(2),0)))
             elif K==2:
-                C=array((((-0.5,Complex(0,0.5),0),(Complex(0,0.5),0.5,0),(0,0,0)),((0,0,-0.5),(0,0,Complex(0,0.5)),(-0.5,Complex(0,0.5),0)),((1/Sqrt(6),0,0),(0,1/Sqrt(6),0),(0,0,-Sqrt(0.6666666666666666))),((0,0,0.5),(0,0,Complex(0,0.5)),(0.5,Complex(0,0.5),0)),((-0.5,Complex(0,-0.5),0),(Complex(0,-0.5),0.5,0),(0,0,0))))
+                C=np.array((((-0.5,Complex(0,0.5),0),(Complex(0,0.5),0.5,0),(0,0,0)),((0,0,-0.5),(0,0,Complex(0,0.5)),(-0.5,Complex(0,0.5),0)),((1/Sqrt(6),0,0),(0,1/Sqrt(6),0),(0,0,-Sqrt(0.6666666666666666))),((0,0,0.5),(0,0,Complex(0,0.5)),(0.5,Complex(0,0.5),0)),((-0.5,Complex(0,-0.5),0),(Complex(0,-0.5),0.5,0),(0,0,0))))
             elif K==3:
-                C=array(((((Complex(0,-0.5)/Sqrt(2),-1/(2.*Sqrt(2)),0),(-1/(2.*Sqrt(2)),Complex(0,0.5)/Sqrt(2),0),(0,0,0)),((-1/(2.*Sqrt(2)),Complex(0,0.5)/Sqrt(2),0),(Complex(0,0.5)/Sqrt(2),1/(2.*Sqrt(2)),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,Complex(0,-0.5)/Sqrt(3)),(0,0,-1/(2.*Sqrt(3))),(Complex(0,-0.5)/Sqrt(3),-1/(2.*Sqrt(3)),0)),((0,0,-1/(2.*Sqrt(3))),(0,0,Complex(0,0.5)/Sqrt(3)),(-1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0)),((Complex(0,-0.5)/Sqrt(3),-1/(2.*Sqrt(3)),0),(-1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0),(0,0,0))),(((Complex(0,0.5)*Sqrt(0.3),1/(2.*Sqrt(30)),0),(1/(2.*Sqrt(30)),Complex(0,0.5)/Sqrt(30),0),(0,0,Complex(0,-1)*Sqrt(0.13333333333333333))),((1/(2.*Sqrt(30)),Complex(0,0.5)/Sqrt(30),0),(Complex(0,0.5)/Sqrt(30),Sqrt(0.3)/2.,0),(0,0,-Sqrt(0.13333333333333333))),((0,0,Complex(0,-1)*Sqrt(0.13333333333333333)),(0,0,-Sqrt(0.13333333333333333)),(Complex(0,-1)*Sqrt(0.13333333333333333),-Sqrt(0.13333333333333333),0))),(((0,0,Complex(0,1)/Sqrt(10)),(0,0,0),(Complex(0,1)/Sqrt(10),0,0)),((0,0,0),(0,0,Complex(0,1)/Sqrt(10)),(0,Complex(0,1)/Sqrt(10),0)),((Complex(0,1)/Sqrt(10),0,0),(0,Complex(0,1)/Sqrt(10),0),(0,0,Complex(0,-1)*Sqrt(0.4)))),(((Complex(0,-0.5)*Sqrt(0.3),1/(2.*Sqrt(30)),0),(1/(2.*Sqrt(30)),Complex(0,-0.5)/Sqrt(30),0),(0,0,Complex(0,1)*Sqrt(0.13333333333333333))),((1/(2.*Sqrt(30)),Complex(0,-0.5)/Sqrt(30),0),(Complex(0,-0.5)/Sqrt(30),Sqrt(0.3)/2.,0),(0,0,-Sqrt(0.13333333333333333))),((0,0,Complex(0,1)*Sqrt(0.13333333333333333)),(0,0,-Sqrt(0.13333333333333333)),(Complex(0,1)*Sqrt(0.13333333333333333),-Sqrt(0.13333333333333333),0))),(((0,0,Complex(0,-0.5)/Sqrt(3)),(0,0,1/(2.*Sqrt(3))),(Complex(0,-0.5)/Sqrt(3),1/(2.*Sqrt(3)),0)),((0,0,1/(2.*Sqrt(3))),(0,0,Complex(0,0.5)/Sqrt(3)),(1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0)),((Complex(0,-0.5)/Sqrt(3),1/(2.*Sqrt(3)),0),(1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0),(0,0,0))),(((Complex(0,0.5)/Sqrt(2),-1/(2.*Sqrt(2)),0),(-1/(2.*Sqrt(2)),Complex(0,-0.5)/Sqrt(2),0),(0,0,0)),((-1/(2.*Sqrt(2)),Complex(0,-0.5)/Sqrt(2),0),(Complex(0,-0.5)/Sqrt(2),1/(2.*Sqrt(2)),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))))
+                C=np.array(((((Complex(0,-0.5)/Sqrt(2),-1/(2.*Sqrt(2)),0),(-1/(2.*Sqrt(2)),Complex(0,0.5)/Sqrt(2),0),(0,0,0)),((-1/(2.*Sqrt(2)),Complex(0,0.5)/Sqrt(2),0),(Complex(0,0.5)/Sqrt(2),1/(2.*Sqrt(2)),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,Complex(0,-0.5)/Sqrt(3)),(0,0,-1/(2.*Sqrt(3))),(Complex(0,-0.5)/Sqrt(3),-1/(2.*Sqrt(3)),0)),((0,0,-1/(2.*Sqrt(3))),(0,0,Complex(0,0.5)/Sqrt(3)),(-1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0)),((Complex(0,-0.5)/Sqrt(3),-1/(2.*Sqrt(3)),0),(-1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0),(0,0,0))),(((Complex(0,0.5)*Sqrt(0.3),1/(2.*Sqrt(30)),0),(1/(2.*Sqrt(30)),Complex(0,0.5)/Sqrt(30),0),(0,0,Complex(0,-1)*Sqrt(0.13333333333333333))),((1/(2.*Sqrt(30)),Complex(0,0.5)/Sqrt(30),0),(Complex(0,0.5)/Sqrt(30),Sqrt(0.3)/2.,0),(0,0,-Sqrt(0.13333333333333333))),((0,0,Complex(0,-1)*Sqrt(0.13333333333333333)),(0,0,-Sqrt(0.13333333333333333)),(Complex(0,-1)*Sqrt(0.13333333333333333),-Sqrt(0.13333333333333333),0))),(((0,0,Complex(0,1)/Sqrt(10)),(0,0,0),(Complex(0,1)/Sqrt(10),0,0)),((0,0,0),(0,0,Complex(0,1)/Sqrt(10)),(0,Complex(0,1)/Sqrt(10),0)),((Complex(0,1)/Sqrt(10),0,0),(0,Complex(0,1)/Sqrt(10),0),(0,0,Complex(0,-1)*Sqrt(0.4)))),(((Complex(0,-0.5)*Sqrt(0.3),1/(2.*Sqrt(30)),0),(1/(2.*Sqrt(30)),Complex(0,-0.5)/Sqrt(30),0),(0,0,Complex(0,1)*Sqrt(0.13333333333333333))),((1/(2.*Sqrt(30)),Complex(0,-0.5)/Sqrt(30),0),(Complex(0,-0.5)/Sqrt(30),Sqrt(0.3)/2.,0),(0,0,-Sqrt(0.13333333333333333))),((0,0,Complex(0,1)*Sqrt(0.13333333333333333)),(0,0,-Sqrt(0.13333333333333333)),(Complex(0,1)*Sqrt(0.13333333333333333),-Sqrt(0.13333333333333333),0))),(((0,0,Complex(0,-0.5)/Sqrt(3)),(0,0,1/(2.*Sqrt(3))),(Complex(0,-0.5)/Sqrt(3),1/(2.*Sqrt(3)),0)),((0,0,1/(2.*Sqrt(3))),(0,0,Complex(0,0.5)/Sqrt(3)),(1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0)),((Complex(0,-0.5)/Sqrt(3),1/(2.*Sqrt(3)),0),(1/(2.*Sqrt(3)),Complex(0,0.5)/Sqrt(3),0),(0,0,0))),(((Complex(0,0.5)/Sqrt(2),-1/(2.*Sqrt(2)),0),(-1/(2.*Sqrt(2)),Complex(0,-0.5)/Sqrt(2),0),(0,0,0)),((-1/(2.*Sqrt(2)),Complex(0,-0.5)/Sqrt(2),0),(Complex(0,-0.5)/Sqrt(2),1/(2.*Sqrt(2)),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))))
             elif K==4:
-                C=array((((((0.25,Complex(0,-0.25),0),(Complex(0,-0.25),-0.25,0),(0,0,0)),((Complex(0,-0.25),-0.25,0),(-0.25,Complex(0,0.25),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((Complex(0,-0.25),-0.25,0),(-0.25,Complex(0,0.25),0),(0,0,0)),((-0.25,Complex(0,0.25),0),(Complex(0,0.25),0.25,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((0,0,1/(4.*Sqrt(2))),(0,0,Complex(0,-0.25)/Sqrt(2)),(1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0)),((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,-1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0)),((1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(0,0,0))),(((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,-1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0)),((0,0,-1/(4.*Sqrt(2))),(0,0,Complex(0,0.25)/Sqrt(2)),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0)),((Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0))),(((1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(0,0,0)),((Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((-1/(2.*Sqrt(7)),Complex(0,0.25)/Sqrt(7),0),(Complex(0,0.25)/Sqrt(7),0,0),(0,0,1/(2.*Sqrt(7)))),((Complex(0,0.25)/Sqrt(7),0,0),(0,Complex(0,0.25)/Sqrt(7),0),(0,0,Complex(0,-0.5)/Sqrt(7))),((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,-0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0))),(((Complex(0,0.25)/Sqrt(7),0,0),(0,Complex(0,0.25)/Sqrt(7),0),(0,0,Complex(0,-0.5)/Sqrt(7))),((0,Complex(0,0.25)/Sqrt(7),0),(Complex(0,0.25)/Sqrt(7),1/(2.*Sqrt(7)),0),(0,0,-1/(2.*Sqrt(7)))),((0,0,Complex(0,-0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0))),(((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,-0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0)),((0,0,Complex(0,-0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0)),((1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0),(0,0,0)))),((((0,0,-3/(4.*Sqrt(14))),(0,0,Complex(0,0.25)/Sqrt(14)),(-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0)),((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,-1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0)),((-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(0,0,1/Sqrt(14)))),(((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,-1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0)),((0,0,-1/(4.*Sqrt(14))),(0,0,Complex(0,0.75)/Sqrt(14)),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0)),((Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14)))),(((-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(0,0,1/Sqrt(14))),((Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14))),((0,0,1/Sqrt(14)),(0,0,Complex(0,-1)/Sqrt(14)),(1/Sqrt(14),Complex(0,-1)/Sqrt(14),0)))),((((3/(2.*Sqrt(70)),0,0),(0,1/(2.*Sqrt(70)),0),(0,0,-Sqrt(0.05714285714285714))),((0,1/(2.*Sqrt(70)),0),(1/(2.*Sqrt(70)),0,0),(0,0,0)),((0,0,-Sqrt(0.05714285714285714)),(0,0,0),(-Sqrt(0.05714285714285714),0,0))),(((0,1/(2.*Sqrt(70)),0),(1/(2.*Sqrt(70)),0,0),(0,0,0)),((1/(2.*Sqrt(70)),0,0),(0,3/(2.*Sqrt(70)),0),(0,0,-Sqrt(0.05714285714285714))),((0,0,0),(0,0,-Sqrt(0.05714285714285714)),(0,-Sqrt(0.05714285714285714),0))),(((0,0,-Sqrt(0.05714285714285714)),(0,0,0),(-Sqrt(0.05714285714285714),0,0)),((0,0,0),(0,0,-Sqrt(0.05714285714285714)),(0,-Sqrt(0.05714285714285714),0)),((-Sqrt(0.05714285714285714),0,0),(0,-Sqrt(0.05714285714285714),0),(0,0,2*Sqrt(0.05714285714285714))))),((((0,0,3/(4.*Sqrt(14))),(0,0,Complex(0,0.25)/Sqrt(14)),(3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0)),((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0)),((3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(0,0,-(1/Sqrt(14))))),(((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0)),((0,0,1/(4.*Sqrt(14))),(0,0,Complex(0,0.75)/Sqrt(14)),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0)),((Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14)))),(((3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(0,0,-(1/Sqrt(14)))),((Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14))),((0,0,-(1/Sqrt(14))),(0,0,Complex(0,-1)/Sqrt(14)),(-(1/Sqrt(14)),Complex(0,-1)/Sqrt(14),0)))),((((-1/(2.*Sqrt(7)),Complex(0,-0.25)/Sqrt(7),0),(Complex(0,-0.25)/Sqrt(7),0,0),(0,0,1/(2.*Sqrt(7)))),((Complex(0,-0.25)/Sqrt(7),0,0),(0,Complex(0,-0.25)/Sqrt(7),0),(0,0,Complex(0,0.5)/Sqrt(7))),((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0))),(((Complex(0,-0.25)/Sqrt(7),0,0),(0,Complex(0,-0.25)/Sqrt(7),0),(0,0,Complex(0,0.5)/Sqrt(7))),((0,Complex(0,-0.25)/Sqrt(7),0),(Complex(0,-0.25)/Sqrt(7),1/(2.*Sqrt(7)),0),(0,0,-1/(2.*Sqrt(7)))),((0,0,Complex(0,0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0))),(((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0)),((0,0,Complex(0,0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0)),((1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0),(0,0,0)))),((((0,0,-1/(4.*Sqrt(2))),(0,0,Complex(0,-0.25)/Sqrt(2)),(-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0)),((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0)),((-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(0,0,0))),(((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0)),((0,0,1/(4.*Sqrt(2))),(0,0,Complex(0,0.25)/Sqrt(2)),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0)),((Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0))),(((-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(0,0,0)),((Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((0.25,Complex(0,0.25),0),(Complex(0,0.25),-0.25,0),(0,0,0)),((Complex(0,0.25),-0.25,0),(-0.25,Complex(0,-0.25),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((Complex(0,0.25),-0.25,0),(-0.25,Complex(0,-0.25),0),(0,0,0)),((-0.25,Complex(0,-0.25),0),(Complex(0,-0.25),0.25,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))))))
+                C=np.array((((((0.25,Complex(0,-0.25),0),(Complex(0,-0.25),-0.25,0),(0,0,0)),((Complex(0,-0.25),-0.25,0),(-0.25,Complex(0,0.25),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((Complex(0,-0.25),-0.25,0),(-0.25,Complex(0,0.25),0),(0,0,0)),((-0.25,Complex(0,0.25),0),(Complex(0,0.25),0.25,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((0,0,1/(4.*Sqrt(2))),(0,0,Complex(0,-0.25)/Sqrt(2)),(1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0)),((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,-1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0)),((1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(0,0,0))),(((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,-1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0)),((0,0,-1/(4.*Sqrt(2))),(0,0,Complex(0,0.25)/Sqrt(2)),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0)),((Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0))),(((1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(0,0,0)),((Complex(0,-0.25)/Sqrt(2),-1/(4.*Sqrt(2)),0),(-1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((-1/(2.*Sqrt(7)),Complex(0,0.25)/Sqrt(7),0),(Complex(0,0.25)/Sqrt(7),0,0),(0,0,1/(2.*Sqrt(7)))),((Complex(0,0.25)/Sqrt(7),0,0),(0,Complex(0,0.25)/Sqrt(7),0),(0,0,Complex(0,-0.5)/Sqrt(7))),((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,-0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0))),(((Complex(0,0.25)/Sqrt(7),0,0),(0,Complex(0,0.25)/Sqrt(7),0),(0,0,Complex(0,-0.5)/Sqrt(7))),((0,Complex(0,0.25)/Sqrt(7),0),(Complex(0,0.25)/Sqrt(7),1/(2.*Sqrt(7)),0),(0,0,-1/(2.*Sqrt(7)))),((0,0,Complex(0,-0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0))),(((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,-0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0)),((0,0,Complex(0,-0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0)),((1/(2.*Sqrt(7)),Complex(0,-0.5)/Sqrt(7),0),(Complex(0,-0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0),(0,0,0)))),((((0,0,-3/(4.*Sqrt(14))),(0,0,Complex(0,0.25)/Sqrt(14)),(-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0)),((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,-1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0)),((-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(0,0,1/Sqrt(14)))),(((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,-1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0)),((0,0,-1/(4.*Sqrt(14))),(0,0,Complex(0,0.75)/Sqrt(14)),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0)),((Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14)))),(((-3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(0,0,1/Sqrt(14))),((Complex(0,0.25)/Sqrt(14),-1/(4.*Sqrt(14)),0),(-1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14))),((0,0,1/Sqrt(14)),(0,0,Complex(0,-1)/Sqrt(14)),(1/Sqrt(14),Complex(0,-1)/Sqrt(14),0)))),((((3/(2.*Sqrt(70)),0,0),(0,1/(2.*Sqrt(70)),0),(0,0,-Sqrt(0.05714285714285714))),((0,1/(2.*Sqrt(70)),0),(1/(2.*Sqrt(70)),0,0),(0,0,0)),((0,0,-Sqrt(0.05714285714285714)),(0,0,0),(-Sqrt(0.05714285714285714),0,0))),(((0,1/(2.*Sqrt(70)),0),(1/(2.*Sqrt(70)),0,0),(0,0,0)),((1/(2.*Sqrt(70)),0,0),(0,3/(2.*Sqrt(70)),0),(0,0,-Sqrt(0.05714285714285714))),((0,0,0),(0,0,-Sqrt(0.05714285714285714)),(0,-Sqrt(0.05714285714285714),0))),(((0,0,-Sqrt(0.05714285714285714)),(0,0,0),(-Sqrt(0.05714285714285714),0,0)),((0,0,0),(0,0,-Sqrt(0.05714285714285714)),(0,-Sqrt(0.05714285714285714),0)),((-Sqrt(0.05714285714285714),0,0),(0,-Sqrt(0.05714285714285714),0),(0,0,2*Sqrt(0.05714285714285714))))),((((0,0,3/(4.*Sqrt(14))),(0,0,Complex(0,0.25)/Sqrt(14)),(3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0)),((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0)),((3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(0,0,-(1/Sqrt(14))))),(((0,0,Complex(0,0.25)/Sqrt(14)),(0,0,1/(4.*Sqrt(14))),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0)),((0,0,1/(4.*Sqrt(14))),(0,0,Complex(0,0.75)/Sqrt(14)),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0)),((Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14)))),(((3/(4.*Sqrt(14)),Complex(0,0.25)/Sqrt(14),0),(Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(0,0,-(1/Sqrt(14)))),((Complex(0,0.25)/Sqrt(14),1/(4.*Sqrt(14)),0),(1/(4.*Sqrt(14)),Complex(0,0.75)/Sqrt(14),0),(0,0,Complex(0,-1)/Sqrt(14))),((0,0,-(1/Sqrt(14))),(0,0,Complex(0,-1)/Sqrt(14)),(-(1/Sqrt(14)),Complex(0,-1)/Sqrt(14),0)))),((((-1/(2.*Sqrt(7)),Complex(0,-0.25)/Sqrt(7),0),(Complex(0,-0.25)/Sqrt(7),0,0),(0,0,1/(2.*Sqrt(7)))),((Complex(0,-0.25)/Sqrt(7),0,0),(0,Complex(0,-0.25)/Sqrt(7),0),(0,0,Complex(0,0.5)/Sqrt(7))),((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0))),(((Complex(0,-0.25)/Sqrt(7),0,0),(0,Complex(0,-0.25)/Sqrt(7),0),(0,0,Complex(0,0.5)/Sqrt(7))),((0,Complex(0,-0.25)/Sqrt(7),0),(Complex(0,-0.25)/Sqrt(7),1/(2.*Sqrt(7)),0),(0,0,-1/(2.*Sqrt(7)))),((0,0,Complex(0,0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0))),(((0,0,1/(2.*Sqrt(7))),(0,0,Complex(0,0.5)/Sqrt(7)),(1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0)),((0,0,Complex(0,0.5)/Sqrt(7)),(0,0,-1/(2.*Sqrt(7))),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0)),((1/(2.*Sqrt(7)),Complex(0,0.5)/Sqrt(7),0),(Complex(0,0.5)/Sqrt(7),-1/(2.*Sqrt(7)),0),(0,0,0)))),((((0,0,-1/(4.*Sqrt(2))),(0,0,Complex(0,-0.25)/Sqrt(2)),(-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0)),((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0)),((-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(0,0,0))),(((0,0,Complex(0,-0.25)/Sqrt(2)),(0,0,1/(4.*Sqrt(2))),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0)),((0,0,1/(4.*Sqrt(2))),(0,0,Complex(0,0.25)/Sqrt(2)),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0)),((Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0))),(((-1/(4.*Sqrt(2)),Complex(0,-0.25)/Sqrt(2),0),(Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(0,0,0)),((Complex(0,-0.25)/Sqrt(2),1/(4.*Sqrt(2)),0),(1/(4.*Sqrt(2)),Complex(0,0.25)/Sqrt(2),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)))),((((0.25,Complex(0,0.25),0),(Complex(0,0.25),-0.25,0),(0,0,0)),((Complex(0,0.25),-0.25,0),(-0.25,Complex(0,-0.25),0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((Complex(0,0.25),-0.25,0),(-0.25,Complex(0,-0.25),0),(0,0,0)),((-0.25,Complex(0,-0.25),0),(Complex(0,-0.25),0.25,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))),(((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0)),((0,0,0),(0,0,0),(0,0,0))))))
             else: 
                 raise ValueError('No Spherical to Cart conversion availble for rank '+str(K))
         else:
             CS=[];
             for i in range(1,K+1):      #generate coupling sequence CS=[1,2,3...K]
                 CS+=[i]
-            C=array(StoneCoefficients(CS,k=k)).transpose()   
+            C=np.array(self.StoneCoefficients(CS,k=k)).transpose()   
         return C   
             
     def StoneCoefficients(self, CouplingSequenceList,k=-1j):
@@ -216,12 +908,108 @@ class TensorScatteringClass():
             if CouplingSequenceList[0]!=1:
                 raise ValueError('First rank in sequence must be 1')
             for J in CouplingSequenceList[1:]:        #loop through all J's after the first
-                Cnew=StoneCoupleVector(C,J,C1)        #couple to next vector to make tensor of rank J
+                Cnew=self.StoneCoupleVector(C,J,C1)        #couple to next vector to make tensor of rank J
                 C=Cnew     
                 #diag('stone coef main loop',['C','J','C1','Cnew'],locals()) 
         return C
        
+    def StoneCoupleVector(self, Cold,Knew,C1):
+        '''
+        StoneCoupleVector(Cold,Knew,C1)
+        couple Stone coefficients Cold to a new vector to make coefficient for spherocal tensor of rank Knew
+        using vector coupling coefficients C1
+        A.J. Stone Molecular Physics 29 1461 (1975) (Equation 1.9)
+        Numpy version converted from Sympy version
+        '''
+        #indexing of Cartesian components=0,1,2 (x,y,z); indexing of spherical components=m+j (0..2j)
+        Cold=np.array(Cold); C1=np.array(C1);                  #make sure they are arrays
+        oldshape=Cold.shape                            #shape of previous connversion matrix
+        newshape=len(oldshape)*[3]+[2*Knew+1]                    #shape of new conversion matrix
+        Cnew=np.zeros(newshape, dtype=complex)                            #empty matrix for new conversion matrix
+        oldindlist=self.indexlist(oldshape)                       #list of all indices for old matrix
+        jn=(newshape[-1]-1)/2
+        jn_=(oldshape[-1]-1)/2                            #j_{n-1} from Stone
+        for ind in oldindlist:                            #loop through indices
+            ind=list(ind);                  #make sure its a list
+            mp=ind[-1]-jn_
+            oldelement=Cold[tuple(ind)]                #value of old matrix for index
+            for an in range(3):
+                for mpp in [-1,0,1]:
+                    m=mp+mpp                    #definitions follow Stone...
+                    vectorconversion=C1[an][mpp+1]            #required element of vector conversion matrix 
+                    cj=self.ClebschGordan(jn_,1,mp,mpp,jn,m)
+                    element=Cold[tuple(ind)]        #required element of old conversion matrix 
+                    newind=ind[:-1]+[an]+[m+jn]            #index for new matrix
+                    newelement=Cnew[tuple(newind)]    #element of new matrix
+                    newelement+=element*vectorconversion*cj        #add in new bit
+                    Cnew[tuple(newind)]=np.copy(newelement)    #save back to array
+        return Cnew
+
+    def indexlist(self, shape):
+        '''
+        indexlist(shape)
+        create a list of index lists covering all indices for shape list (all possible indices)
+          (Numpy 1.6 has new indexing functionality that my render this obsolete)
+        '''
+        lenshape=len(shape)                #number of indices
+        totalelements=1                    #total number of elements in nested list (start value)
+        indlistlist=[]                    #start with empty list of index lists
+        indlist=list(range(lenshape))            #single index list placeholder
+        multiplicity=list(range(lenshape))        #multiplicities of collumns for counting 
+        multiplicity[lenshape-1]=1            #last collumn is 'ones'    
+        for i in range(lenshape-2,-1,-1):        
+            totalelements*=shape[i+1]
+            multiplicity[i]=multiplicity[i+1]*shape[i+1]
+        totalelements*=shape[0]
     
+        for count in range(totalelements):        #loop through each element (flat index)
+            for i in range(lenshape-1,-1,-1):    #loop through indices in reverse order
+                indlist[i]=(count/multiplicity[i])%shape[i]    
+            indlistlist+=[np.copy(indlist)]
+        return indlistlist    
+
+    def ClebschGordan(self, j1, j2, m1, m2, J, M, warn=True):
+        """
+        ClebschGordan(j1, j2, m1, m2, J, M, cglimit=20,warn=True)
+        Computes exact sympy form for Clebsch-Gordan coefficient
+        <j1 j2; m1 m2|j1 j2; JM>.
+        For reference see
+        http://en.wikipedia.org/wiki/Table_of_Clebsch-Gordan_coefficients.
+        Clebsch Gordan numpy function by Michael V. DePalatis, modified and converted to sympy by SPC
+        warn gives warning for unphysical coefficients
+         Adapted from sympy ClebschGordan
+        """
+        j1=float(j1); j2=float(j2); m1=float(m1); m2=float(m2); J=float(J); M=float(M);
+        if not M==(m1+m2) or J>(j1+j2) or J<abs(j1-j2) or J<0 or abs(m1)>j1 or abs(m2)>j2 or abs(M)>J:
+            if warn:
+                print 'Warning: Unphysical Clebsch-Gordan coefficient (j1,j2,m1,m2,J,M)='+str((j1,j2,m1,m2,J,M))
+            return 0
+    
+        c1 = np.sqrt((2*J+1) * factorial(J+j1-j2) * factorial(J-j1+j2) * \
+            factorial(j1+j2-J)/factorial(j1+j2+J+1))
+        c2 = np.sqrt(factorial(J+M) * factorial(J-M) * factorial(j1-m1) * \
+            factorial(j1+m1) * factorial(j2-m2) * factorial(j2+m2))
+        c3 = 0.
+        cglimit=max((j1+j2-J),(j1-m1),(j2+m1))+1        #max k that satisfies requirement that all factorial args are non-neg
+        for k in np.arange(cglimit):
+            use = True
+            d = [0, 0, 0, 0, 0]
+            d[0] = j1 + j2 - J - k
+            d[1] = j1 - m1 - k
+            d[2] = j2 + m2 - k
+            d[3] = J - j2 + m1 + k
+            d[4] = J - j1 -m2 + k
+            prod = factorial(k)
+            for arg in d:
+                if arg < 0:
+                    use = False
+                    break
+                prod *= factorial(arg)
+            if use:
+                #print k
+                c3 += (-1)**k/prod
+        return c1*c2*c3
+
     
     def spherical_to_cart_tensor(self, Ts):
         K=(len(Ts)-1)/2; #spherical tensor rank
@@ -324,7 +1112,7 @@ class TensorScatteringClass():
         outstr = \
             (self.fmt+'%s') % ('Site allowed', self.msg(site_scalar_allowed, txt=txtyn)) \
             +(self.fmt+'%s') % ('Spacegroup allowed', self.msg(gen_scalar_allowed, txt=txtyn)) \
-            +(self.fmt+'%s') % ('Tensor allowed:', self.msg(tensor_allowed, txt=txtyn)) \
+            +(self.fmt+'%s') % ('Tensor allowed', self.msg(tensor_allowed, txt=txtyn)) \
             +(self.fmt+'%s') % ('Parity', self.msg(Psym, txt=txtoe) ) \
             +(self.fmt+'%s') % ('Time', self.msg(Tsym, txt=txtoe)) \
             +(self.fmt+'%s') % ('PT', self.msg(PTsym, txt=txtoe)) \
@@ -337,14 +1125,9 @@ class TensorScatteringClass():
   
         self.sym_sum_phases, self.sum_phases, self.gen_scalar_allowed, self.site_scalar_allowed, self.tensor_allowed, self.Psym, self.Tsym, self.PTsym, self.sym_phases\
             = sym_sum_phases, sum_phases, gen_scalar_allowed, site_scalar_allowed, tensor_allowed, Psym, Tsym, PTsym, sym_phases
- 
-    
-    
-    #save as attributes
-    #           return [sym_sum_phases, sum_phases, gen_scalar_allowed, site_scalar_allowed, tensor_allowed, Psym, Tsym, PTsym, sym_phases,]
-    
+
         return outstr
-  
+      
     def msg(self, num, txt=['plus','minus','zero','other']):
         #return message text for +1,-1, 0, other (e.g. None)
         if num==1:
@@ -357,15 +1140,6 @@ class TensorScatteringClass():
             str=txt[3]
         return str
         
-        
-        
-        
-        
-#TimeEven=True
-#en=8.0
-#hkl=array([0,1,1]); Fe=array([0,0,0]); S=array([0.385,0.385,0.385]);hkln=array([0,2,0]); lam=12.4/en ; 
-#sitevec=S; 
-#mpol='E1E1';K=2; time=+1;parity=+1; d_an=d_PG004=3.355/2; pol_theta=arcsin(lam/2/d_an);
         
         
     def spacegroup_list_from_genpos_list(self, genposlist):
@@ -385,10 +1159,12 @@ class TensorScatteringClass():
         return [np.array([m0, m1, m2]).T, np.array(vec)]       
 
     def latt2b(self, lat, direct=False, BLstyle=False):
-        #follow Busing&Levy, D.E.Sands
-        #direct=False: normal recip space B matrix (B&L)
-        #direct=True, BLstyle=True: Busing & Levy style applied to real space (i.e. x||a)
-        #direct=True, BLstyle=False: Real space B matrix compatible with recip space B matrix
+        '''
+        follow Busing&Levy, D.E.Sands
+        direct=False: normal recip space B matrix (B&L)
+        direct=True, BLstyle=True: Busing & Levy style applied to real space (i.e. x||a)
+        direct=True, BLstyle=False: Real space B matrix compatible with recip space B matrix
+        '''
         a1=lat[0];    a2=lat[1];    a3=lat[2];
         alpha1=lat[3]*np.pi/180;    alpha2=lat[4]*np.pi/180;    alpha3=lat[5]*np.pi/180;
         v=a1*a2*a3*np.sqrt(1-np.cos(alpha1)**2-np.cos(alpha2)**2-np.cos(alpha3)**2+2*np.cos(alpha1)*np.cos(alpha2)*np.cos(alpha3))

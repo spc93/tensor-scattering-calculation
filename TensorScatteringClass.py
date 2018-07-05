@@ -23,6 +23,7 @@ class TensorScatteringClass():
         equiv_sites     compute symmetry-equivalent sites for selected site
         invert          inverts current spacegroup operators and sites
         isGroup(sg)     Returns True if sg forms a group or False and shows message if not (self.isGroup(self.sglist) should return True)
+        TensorCalc      Calculate tensor properties for crystal and reflection; save tensors as attributes; print tensor information
         print_tensors() Display crystal/atomic/structure factor spherical/Cartesian tensors
         CalculateIntensityInPolarizationChannels    calculate four intensity channels vs psi
         PlotIntensityInPolarizationChannels        plot sigma or pi intensity vs azimuthal angle
@@ -55,7 +56,9 @@ class TensorScatteringClass():
             print "=== Error: site keyword string must be in the atomic site list: " + self.all_labels
             return
         
-        self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index]), float(cb['_atom_site_fract_y'][self.atom_index]), float(cb['_atom_site_fract_z'][self.atom_index])])
+        #self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index]), float(cb['_atom_site_fract_y'][self.atom_index]), float(cb['_atom_site_fract_z'][self.atom_index])])
+        #allow for error in brackets in cif file entry
+        self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_y'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_z'][self.atom_index].split('(')[0]) ])
 
         try:
             self.symxyz=cb['_symmetry_equiv_pos_as_xyz']
@@ -81,6 +84,7 @@ class TensorScatteringClass():
         if self.Site==None:
             return "=== Atomic site labels: \n" + self.all_labels + "\n=== Use Site keyword to specific a site, e.g. Site = 'Fe1'"
         self.fmt='\n%28s:  '
+            
         return '\nCrystal properties\n' \
         + (self.fmt+'%s') % ('CIF file',self.CIFfile) \
         + (self.fmt+'%.3f %.3f %.3f %.2f %.2f %.2f') % ('Lattice',self.lattice[0], self.lattice[1], self.lattice[2], self.lattice[3], self.lattice[4], self.lattice[5]) \
@@ -90,8 +94,7 @@ class TensorScatteringClass():
         + (self.fmt+'%i') % ('No. of spacegroup ops', len(self.sglist)) \
         + (self.fmt+'%i') % ('No. of sym ops at site', len(self.pglist)) \
         + (self.fmt+'%i') % ('No. of equiv. sites in cell', len(self.sglist)/len(self.pglist)) \
-        + (self.fmt+'%i') % ('No. of pg ops for crystal', len(self.crystalpglist)) \
-
+        + (self.fmt+'%i') % ('No. of pg ops for crystal', len(self.crystalpglist))
 
     def TensorCalc(self, hkl=np.array([0,0,0]), K=None, Parity=+1, Time=+1):
         '''
@@ -1037,8 +1040,6 @@ class TensorScatteringClass():
             newR=np.dot(mat, R)+vec
             newRgen=np.dot(mat, Rgen)+vec
             phase=np.exp(np.pi*2.j * np.dot(hkl, newR))/identy_phase    #change phases so first one is unity
-            #phase=np.exp(np.pi*2.j * np.dot(hkl, newR)); print 'phase: ',  phase;  print    #temp##################
-    
             sum_phase_all+=np.exp(np.pi*2.j * np.dot(hkl, newR))              #add new phase for site to sum
             sum_phase_gen+=np.exp(np.pi*2.j * np.dot(hkl, newRgen))              #add new phase for general (random) position to sum
             newsym=1;
@@ -1101,16 +1102,19 @@ class TensorScatteringClass():
         if np.allclose(sum_phases, sum_phases.real, atol=tol):
             sum_phases=np.real(sum_phases)
         else:
-            print'=== Warning: sum of phases is compex. This was not np.expected (see below):\n',sum_phases
+            pass
+            #investigate this...
+            #print'=== Warning: sum of phases is compex. This was not np.expected (see below). Maybe its OK - need to check:\n',sum_phases
         if abs(sum_phases[0])>tol:
             sum_phases=np.array(sum_phases); sum_phases=sum_phases/sum_phases[0] #normalize to first (identity)
         else:
-            print '=== Warning: the phase sum for first (identity) operator is close to zero. This was not np.expected'
+            print '=== Warning: the phase sum for first (identity) operator is close to zero. This was not expected'
     
-                  
         txtyn=['Yes','Invalid value', 'No', 'Invalid value']; txtoe=['Even', 'Odd', 'Either', 'Either']; 
         outstr = \
-            (self.fmt+'%s') % ('Site allowed', self.msg(site_scalar_allowed, txt=txtyn)) \
+            (self.fmt+'[%.1f, %.1f, %.1f]') % ('hkl',self.hkl[0], self.hkl[1], self.hkl[2]) \
+            +(self.fmt+'%s') % ('Site allowed', self.msg(site_scalar_allowed, txt=txtyn)) \
+            +(self.fmt+'%.2f+%.2fi') % ('Structure factor for site', np.real(sum_phase_all/len(self.pglist)), np.imag(sum_phase_all/len(self.pglist))) \
             +(self.fmt+'%s') % ('Spacegroup allowed', self.msg(gen_scalar_allowed, txt=txtyn)) \
             +(self.fmt+'%s') % ('Tensor allowed', self.msg(tensor_allowed, txt=txtyn)) \
             +(self.fmt+'%s') % ('Parity', self.msg(Psym, txt=txtoe) ) \

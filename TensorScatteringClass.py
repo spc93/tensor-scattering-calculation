@@ -40,7 +40,12 @@ class TensorScatteringClass():
     '''
 
 
+
     def __init__(self, CIFfile=None, Site=None, TimeEven=False):
+        self.tensortypes = ['E1E1','E1E2','E2E2'] # supported tensor types
+        self.processes = self.tensortypes+['E1E1mag','NonResMag'] # processes list includes magnetic scattering (not treated in tensor framework)
+        self.Fs = None   #placeholder for spherical scattering tensor (if defined)
+        
         if CIFfile==None:
             raise ValueError('=== Must give CIFfile keyword argument')
         self.CIFfile = CIFfile
@@ -610,6 +615,51 @@ class TensorScatteringClass():
         self.G=np.array([[f_ss,  f_ps], [f_sp,  f_pp]])    #scattering matrix
         return self.G
 
+#     def CalculateIntensityInPolarizationChannels(self, process, lam, hkl, hkln, psideg, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None):
+#         '''
+#         Calculate intensity in four linear polarization channels
+#         psi can be a scalar or array/list
+#         '''
+# 
+#         tensortypes=['E1E1','E1E2','E2E2']
+#         processes=tensortypes+['E1E1mag','NonResMag']
+#         assert process in processes, '=== First argument (process) should be in ' + str(processes)
+# 
+#         assert process not in tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
+#         assert process != 'E1E1mag' or mk is not None, '=== Need keyword mk for E1E1 resonant magnetic scattering'
+#         assert process != 'NonResMag' or (sk is not None and lk is not None), '=== Need keywords sk, lk (arrays) for non-resonant magnetic scattering'
+#         
+#         if process in tensortypes:
+#             self.TensorCalc(K=K, hkl=hkl, Parity=Parity, Time=Time)
+#         
+#         try:
+#             psi=[float(psideg)*np.pi/180]
+#         except:
+#             psi=np.array(psideg*np.pi/180)
+# 
+#         Iss, Isp,Ips, Ipp = [], [], [],[]
+#         for psival in psi:
+#             
+#             (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
+# 
+#             if process in tensortypes:
+#                 self.Xtensor(process, K, Time, Parity, esig, e1pi, q0, q1)
+#                 G=self.TensorScatteringMatrix(process, self.Fs, Time, Parity, esig, e0pi, e1pi, q0,  q1)
+# 
+#             elif process == 'E1E1mag':
+#                 G=self.E1E1ResonantMagneticScatteringMatrix(mk, esig, e0pi, e1pi, q0,  q1)
+#                 
+#             elif process == 'NonResMag':
+#                 G=self.NonResonantMagneticScatteringMatrix(sk, lk, esig, e0pi, e1pi, q0,  q1)
+#                     
+#             else:
+#                 raise ValueError("== Don't know what to do with process type %s: " % process)
+#         
+#             Iss+=[abs(G[0,0])**2]; Isp+=[abs(G[1,0])**2]; Ips+=[abs(G[0,1])**2]; Ipp+=[abs(G[1,1])**2];
+#         if len(Iss)>1:
+#             return (np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp))
+#         else:
+#             return (Iss[0], Isp[0], Ips[0], Ipp[0])
 
 
     def CalculateIntensityInPolarizationChannels(self, process, lam, hkl, hkln, psideg, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None):
@@ -618,47 +668,112 @@ class TensorScatteringClass():
         psi can be a scalar or array/list
         '''
 
-        tensortypes=['E1E1','E1E2','E2E2']
-
-        assert process not in tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
-        assert process != 'E1E1mag' or mk != None, '=== Need keyword mk for E1E1 resonant magnetic scattering'
-        assert process != 'NonResmag' or (sk is not None and lk is not None), '=== Need keywords sk, lk (arrays) for non-resonant magnetic scattering'
+        assert process in self.processes, '=== First argument (process) should be in ' + str(self.processes)
+        assert process not in self.tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
+        assert process != 'E1E1mag' or mk is not None, '=== Need keyword mk for E1E1 resonant magnetic scattering'
+        assert process != 'NonResMag' or (sk is not None and lk is not None), '=== Need keywords sk, lk (arrays) for non-resonant magnetic scattering'
         
-        if process in tensortypes:
+        if process in self.tensortypes:
             self.TensorCalc(K=K, hkl=hkl, Parity=Parity, Time=Time)
         
         try:
             psi=[float(psideg)*np.pi/180]
         except:
-            psi=np.array(psideg*np.pi/180)
+            psi=np.array(psideg)*np.pi/180
 
         Iss, Isp,Ips, Ipp = [], [], [],[]
         for psival in psi:
             
-            (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
-
-            if process in tensortypes:
-                self.Xtensor(process, K, Time, Parity, esig, e1pi, q0, q1)
-                G=self.TensorScatteringMatrix(process, self.Fs, Time, Parity, esig, e0pi, e1pi, q0,  q1)
-
-            elif process == 'E1E1mag':
-                G=self.E1E1ResonantMagneticScatteringMatrix(mk, esig, e0pi, e1pi, q0,  q1)
-                
-            elif process == 'NonResmag':
-                G=self.NonResonantMagneticScatteringMatrix(sk, lk, esig, e0pi, e1pi, q0,  q1)
-                    
-            else:
-                raise ValueError("== Don't know what to do with process type %s: " % process)
-        
+            G = self.CalculateScatteringMatrixG(process, lam, psival, hkl, hkln, Fs = self.Fs, K = K, Time = Time, Parity = Parity, mk = mk, sk = sk, lk = lk)
+            #print 'G', G ################
             Iss+=[abs(G[0,0])**2]; Isp+=[abs(G[1,0])**2]; Ips+=[abs(G[0,1])**2]; Ipp+=[abs(G[1,1])**2];
+        if len(Iss)>1:
+            return (np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp))
+        else:
+            return (Iss[0], Isp[0], Ips[0], Ipp[0])
+        
+    def CalculateIntensityFromPolarizationAnalyser(self, process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg = 45, stokesvec_swl = [0, 0, 1], K = None, Time = None, Parity = None, mk = None, lk = None, sk = None):
+        '''
+        Calculate intensity from polarization analyser vs pol_eta (analyser rotation)
+        pol_eta_deg can be a scalar or array/list
+        pol_th_deg is polarizer theta angle (deg) (default 45)
+        stokesvec_swl is Stokes as per SWL papers (P3 = horizontal linear, default [0 ,0, 1])
+        '''
+        #print 'process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg, stokesvec_swl, K , Time, Parity, mk, lk, sk, savefig'
+        #print process, lam, hkl, hkln, psideg, pol_eta_deg[0:4], pol_th_deg, stokesvec_swl, K , Time, Parity, mk, lk, sk, savefig
+        #print 'stokes', stokesvec_swl
+        
+        
+        assert process in self.processes+['Scalar'], '=== First argument (process) should be in ' + str(self.processes+['Scalar'])
+        assert process not in self.tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
+        assert process != 'E1E1mag' or mk is not None, '=== Need keyword mk for E1E1 resonant magnetic scattering'
+        assert process != 'NonResMag' or (sk is not None and lk is not None), '=== Need keywords sk, lk (arrays) for non-resonant magnetic scattering'
+        
+        if process in self.tensortypes:
+            self.TensorCalc(K=K, hkl=hkl, Parity=Parity, Time=Time)
 
-        return (np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp))
+        
+        try:
+            pol_eta = [float(pol_eta_deg) * np.pi/180]
+        except:
+            pol_eta = np.array(pol_eta_deg) * np.pi/180
+        
+        pol_theta = pol_th_deg * np.pi/180
+        
+        if process=='Scalar':  #special case - scalar scattering not considered in the rest of the class
+            self.calcXrayVectors(lam, 0, hkl, hkln) # needed to calculate theta
+            G = np.array([[1, 0], [0, np.cos(2*self.theta)]])
+        else:
+            G = self.CalculateScatteringMatrixG(process, lam, psideg*np.pi/180, hkl, hkln, Fs = self.Fs, K = K, Time = Time, Parity = Parity, mk = mk, sk = sk, lk = lk)
+        
+        [P1, P2, P3] = stokesvec_swl
+        mu = 1./2*np.array([[1.+P3, P1-1.J*P2], [ P1+1.J*P2, 1.-P3]])
+            
+        I_pol=[]
+        for eta in pol_eta:
+            A = np.array([[np.cos(eta), np.sin(eta)], [-np.cos(2*pol_theta)*np.sin(eta), np.cos(2*pol_theta)*np.cos(eta) ]])
+            I_pol += [np.dot(A, np.dot(G, np.dot(mu,np.dot(np.conjugate(G.T), np.conjugate(A.T))))).trace()]
+            
+        if len(I_pol)>1:
+            return np.array(I_pol)
+        else:
+            return I_pol[0]
 
+    def CalculateScatteringMatrixG(self, process, lam, psival, hkl, hkln, Fs = None, K=None, Time = None, Parity = None, mk = None, sk = None, lk = None):
+        '''
+        Calculate G for specified scattering process; require lam, psival, hkl, hkln
+        Fs (structure factor spherical tensor), Time & Parity symmetry, mk, sk, lk are required for specific processes only
+        2 x 2 G matrix defined in SWL papers
+        '''
+        #print 'K in CalculateScatteringMatrixG', K ###############
+        
+        (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
+        
+        (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
+
+        if process in self.tensortypes:
+            assert Fs is not None and K is not None
+            self.Xtensor(process, K, Time, Parity, esig, e1pi, q0, q1)
+            G=self.TensorScatteringMatrix(process, Fs, Time, Parity, esig, e0pi, e1pi, q0,  q1)
+
+        elif process == 'E1E1mag':
+            #print mk, esig, e0pi, e1pi, q0,  q1 #############################
+            G=self.E1E1ResonantMagneticScatteringMatrix(mk, esig, e0pi, e1pi, q0,  q1)
+                
+        elif process == 'NonResMag':
+            G=self.NonResonantMagneticScatteringMatrix(sk, lk, esig, e0pi, e1pi, q0,  q1)
+                    
+        else:
+            raise ValueError("== Don't know what to do with process type %s: " % process)
+        
+        return G
 
     def PlotIntensityInPolarizationChannels(self, process, lam, hkl, hkln, psideg=None, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None , sigmapi=None, savefile=None):
         '''
         Plot azimuthal dependence of sigma or pi intensity and save figure if savefile keyword string (fine name root) given
         '''
+        #print 'plot', mk
+        
         assert sigmapi in ('sigma', 'pi'), "=== sigmapi keyword must be 'sigma' or 'pi'"
 
         if psideg == None:
@@ -685,6 +800,25 @@ class TensorScatteringClass():
 
         if savefile != None:
             plt.savefig('%s '+sigmapi+'.pdf' % savefile)
+
+    def PlotIntensityVsPolarizationAnalyserRotation(self, process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg = 45, stokesvec_swl = [0, 0, 1], K = None, Time = None, Parity = None, mk = None, lk = None, sk = None, savefile=None):
+        '''
+        Plot intensity vs PA rotation and save figure if savefile keyword string (fine name root) given
+        '''
+
+        I_pol = self.CalculateIntensityFromPolarizationAnalyser(process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg = pol_th_deg, stokesvec_swl = stokesvec_swl, K = K, Time = Time, Parity = Parity, mk = mk, lk = lk, sk = sk)
+
+        titlestr = process+' hkl=[%.1f, %.1f, %.1f]   $\psi_0$=[%.1f, %.1f, %.1f]' % (tuple(hkl)+tuple(hkln)) 
+
+        plt.figure(); 
+        plt.plot(pol_eta_deg, I_pol, label='Polarization\nanalyser\nintensity',linewidth=2.0);
+        
+        plt.legend(loc='best'); plt.ylabel('Intensity (aribtrary units)'); plt.axis('tight'); plt.xlabel('$\eta$ (degrees)'); plt.title(titlestr); plt.grid(1)
+        if max(abs(I_pol)) < 1e-20:
+            plt.ylim([0,1])
+
+        if savefile != None:
+            plt.savefig('%s '+etascan+'.pdf' % savefile)
 
 
     def theta_to_cartesian(self, hkl, hkln, psi, B):
@@ -1280,10 +1414,79 @@ class TensorScatteringClass():
                     print M3, V3, T3, '\n=== Derived from\n', S1, '\n=== and\n', S2
                     return False
         return True
+    
+    
+    
+class TensorScatteringClassMagrotExtension(TensorScatteringClass):
+    
+    def PlotIntensityInPolarizationChannelsVsMagrot(self, process, lam, hkl, hkln, psideg=None, K=None, Time=None, Parity=None, mk=None, lk=None, sk=None , sigmapi=None, savefile=None):
+        '''
+        Extension of TensorScatteringClass with new method to calculate magnetic scattering vs magnet rotation angle
+        Moments are rotated about z axis
+        psideg must be a scalar
+        Plot magrot dependence of sigma or pi intensity and save figure if savefile keyword string (fine name root) given
+        '''
+        assert sigmapi in ('sigma', 'pi'), "=== sigmapi keyword must be 'sigma' or 'pi'"
+
+        Iss, Isp, Ips, Ipp = [], [], [], []
+        magrot = np.array(range(361))
+        _mk, _sk, _lk = deepcopy(mk), deepcopy(sk), deepcopy(lk)
         
-    
-    
-    
+        
+        #test
+        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
+        #print '_Iss', _Iss
+        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
+        #print '_Iss', _Iss
+        #print 'mk, sk, lk', mk, sk, lk
+        
+        for rot in magrot:
+            m = rot*np.pi/180
+            sm, cm = np.sin(m), np.cos(m)
+            rotmat = np.array([[cm, -sm, 0],[sm, cm, 0],[0, 0, 1]])
+            #rotate any moments specified
+            if mk is not None:
+                mk = np.dot(rotmat, _mk)
+            if sk is not None:
+                sk = np.dot(rotmat, _sk)
+            if lk is not None:
+                lk = np.dot(rotmat, _lk)
+            _Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
+            Iss+=[_Iss]
+            Isp+=[_Isp]
+            Ips+=[_Ips]
+            Ipp+=[_Ipp]
+        Iss, Isp, Ips, Ipp = np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp)
+
+        #print 'rotmat',  rotmat
+        #print '_sk',  _sk,
+        #print 'sk',   sk
+
+        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
+        #print '_Iss', _Iss
+        #print 'mk, sk, lk', mk, sk, lk
+        #print Iss.shape, Isp.shape, Ips.shape, Ipp.shape, magrot.shape
+        
+        #sig-sig, sig-pi, sig-total
+        titlestr = process+' hkl=[%.1f, %.1f, %.1f]   $\psi_0$=[%.1f, %.1f, %.1f]' % (tuple(hkl)+tuple(hkln)) 
+
+        if sigmapi == 'sigma':
+            Ixs, Ixp, Itot, polchar = Iss, Isp, Iss + Isp, '\sigma'
+        elif sigmapi == 'pi':
+            Ixs, Ixp, Itot, polchar = Ips, Ipp, Ips + Ipp, '\pi'
+
+        plt.figure(); 
+        #plt.hold(True);
+        plt.plot(magrot, Itot, 'k',label='$\sigma$ Total',linewidth=2.0);
+        plt.plot(magrot, Ixs, 'r',label='$'+polchar+'\sigma$',linewidth=2.0);
+        plt.plot(magrot, Ixp, 'b',label='$'+polchar+'\pi$',linewidth=2.0); 
+        plt.legend(loc='best'); plt.ylabel('Intensity (aribtrary units)'); plt.axis('tight'); plt.xlabel('Magrot (degrees)'); plt.title(titlestr); plt.grid(1)
+        if max(abs(Itot)) < 1e-20:
+            plt.ylim([0,1])
+
+        if savefile != None:
+            plt.savefig('%s '+sigmapi+'.pdf' % savefile)
+
 
 
 

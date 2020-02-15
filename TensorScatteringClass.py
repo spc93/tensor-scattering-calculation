@@ -1,3 +1,9 @@
+# make python3 compatible
+# check divides - done (?)
+#check range - ok no change
+# check prints
+
+
 import sys, pprint
 from copy import deepcopy
 from numpy.linalg import inv
@@ -9,7 +15,7 @@ import matplotlib.pyplot as plt
 try:
     import CifFile
 except:
-    print "=== You need to install the PyCifRW module and add it to the Python path.\n=== Use pip install PyCifRW or visit https://pypi.org/project/PyCifRW/"
+    print("=== You need to install the PyCifRW module and add it to the Python path.\n=== Use pip install PyCifRW or visit https://pypi.org/project/PyCifRW/")
 #sys.path.append('/home/spc93/python/PyCifRW-3.1.2')
 #sys.path.append('/media/DCF0769CF0767D18/python/PyCifRW-3.1.2')
 
@@ -58,7 +64,7 @@ class TensorScatteringClass():
         try:
             self.atom_index = cb['_atom_site_label'].index(Site)
         except:
-            print "=== Error: site keyword string must be in the atomic site list: " + self.all_labels
+            print("=== Error: site keyword string must be in the atomic site list: " + self.all_labels)
             return
         
         #self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index]), float(cb['_atom_site_fract_y'][self.atom_index]), float(cb['_atom_site_fract_z'][self.atom_index])])
@@ -83,7 +89,7 @@ class TensorScatteringClass():
         
         self.pglist= self.site_sym(self.sglist, self.sitevec)   #point group of site
         self.crystalpglist = self.crystal_point_sym(self.sglist)
-        print self.__repr__()
+        print(self.__repr__())
                 
     def __repr__(self):
         if self.Site==None:
@@ -98,7 +104,7 @@ class TensorScatteringClass():
         + (self.fmt+'%.3f %.3f %.3f')  % ('Site vector', self.sitevec[0], self.sitevec[1], self.sitevec[2]) \
         + (self.fmt+'%i') % ('No. of spacegroup ops', len(self.sglist)) \
         + (self.fmt+'%i') % ('No. of sym ops at site', len(self.pglist)) \
-        + (self.fmt+'%i') % ('No. of equiv. sites in cell', len(self.sglist)/len(self.pglist)) \
+        + (self.fmt+'%i') % ('No. of equiv. sites in cell', int(len(self.sglist)/len(self.pglist))) \
         + (self.fmt+'%i') % ('No. of pg ops for crystal', len(self.crystalpglist))
 
     def TensorCalc(self, hkl=np.array([0,0,0]), K=None, Parity=+1, Time=+1):
@@ -135,7 +141,7 @@ class TensorScatteringClass():
         self.Ts_crystal=self.norm_array(self.cart_to_spherical_tensor(self.Tc_crystal));    #crystal spherical tensor
         self.Fs=self.norm_array(self.cart_to_spherical_tensor(self.Fc));    #SF spherical tensor
 
-        print outstr
+        print(outstr)
         return
 
     def calcXrayVectors(self, lam, psi, hkl, hkln):
@@ -255,7 +261,7 @@ class TensorScatteringClass():
                 return  n2t+n2
         if process=='E1E2' and rank==1 and parity==-1:
             #E1E2 rank 1
-            print "xxxxx E1E2 rank 1 not tested"
+            print("xxxxx E1E2 rank 1 not tested")
             n1t=np.array([(Complex(0,0.1)*(-3*(e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*(q0x-Complex(0,1)*q0y)-3*e1z*(e0z*(q0x-Complex(0,1)*q0y)+(e0x-Complex(0,1)*e0y)*q0z)-(e1x-Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6),(Complex(0,-0.1)*(-2*e0x*e1z*q0x-2*e0y*e1z*q0y+3*e0x*e1x*q0z+3*e0y*e1y*q0z+e0z*(3*e1x*q0x+3*e1y*q0y+4*e1z*q0z)))/Sqrt(3),(Complex(0,0.1)*(3*(e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*(q0x+Complex(0,1)*q0y)+3*e1z*(e0z*(q0x+Complex(0,1)*q0y)+(e0x+Complex(0,1)*e0y)*q0z)+(e1x+Complex(0,1)*e1y)*(e0x*q0x+e0y*q0y-2*e0z*q0z)))/Sqrt(6)])
             n1=np.array([(Complex(0,0.1)*(-3*(e0x+Complex(0,1)*e0y)*(e1x-Complex(0,1)*e1y)*(q1x-Complex(0,1)*q1y)-3*e0z*(e1z*(q1x-Complex(0,1)*q1y)+(e1x-Complex(0,1)*e1y)*q1z)-(e0x-Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6),(Complex(0,0.1)*(-3*(e0x*e1z*q1x+e0y*e1z*q1y+e0x*e1x*q1z+e0y*e1y*q1z)+2*e0z*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(3),(Complex(0,0.1)*(3*(e0x-Complex(0,1)*e0y)*(e1x+Complex(0,1)*e1y)*(q1x+Complex(0,1)*q1y)+3*e0z*(e1z*(q1x+Complex(0,1)*q1y)+(e1x+Complex(0,1)*e1y)*q1z)+(e0x+Complex(0,1)*e0y)*(e1x*q1x+e1y*q1y-2*e1z*q1z)))/Sqrt(6)])
             if time==1:
@@ -685,7 +691,7 @@ class TensorScatteringClass():
         for psival in psi:
             
             G = self.CalculateScatteringMatrixG(process, lam, psival, hkl, hkln, Fs = self.Fs, K = K, Time = Time, Parity = Parity, mk = mk, sk = sk, lk = lk)
-            #print 'G', G ################
+
             Iss+=[abs(G[0,0])**2]; Isp+=[abs(G[1,0])**2]; Ips+=[abs(G[0,1])**2]; Ipp+=[abs(G[1,1])**2];
         if len(Iss)>1:
             return (np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp))
@@ -698,11 +704,7 @@ class TensorScatteringClass():
         pol_eta_deg can be a scalar or array/list
         pol_th_deg is polarizer theta angle (deg) (default 45)
         stokesvec_swl is Stokes as per SWL papers (P3 = horizontal linear, default [0 ,0, 1])
-        '''
-        #print 'process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg, stokesvec_swl, K , Time, Parity, mk, lk, sk, savefig'
-        #print process, lam, hkl, hkln, psideg, pol_eta_deg[0:4], pol_th_deg, stokesvec_swl, K , Time, Parity, mk, lk, sk, savefig
-        #print 'stokes', stokesvec_swl
-        
+        '''       
         
         assert process in self.processes+['Scalar'], '=== First argument (process) should be in ' + str(self.processes+['Scalar'])
         assert process not in self.tensortypes or (K != None and Time != None and Parity != None), '=== Need keywords K, Time, Parity for tensor processes' 
@@ -745,8 +747,7 @@ class TensorScatteringClass():
         Fs (structure factor spherical tensor), Time & Parity symmetry, mk, sk, lk are required for specific processes only
         2 x 2 G matrix defined in SWL papers
         '''
-        #print 'K in CalculateScatteringMatrixG', K ###############
-        
+       
         (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
         
         (h, q0, q1, esig, e0pi, e1pi) = self.calcXrayVectors(lam, psival, hkl, hkln)
@@ -757,7 +758,6 @@ class TensorScatteringClass():
             G=self.TensorScatteringMatrix(process, Fs, Time, Parity, esig, e0pi, e1pi, q0,  q1)
 
         elif process == 'E1E1mag':
-            #print mk, esig, e0pi, e1pi, q0,  q1 #############################
             G=self.E1E1ResonantMagneticScatteringMatrix(mk, esig, e0pi, e1pi, q0,  q1)
                 
         elif process == 'NonResMag':
@@ -772,7 +772,6 @@ class TensorScatteringClass():
         '''
         Plot azimuthal dependence of sigma or pi intensity and save figure if savefile keyword string (fine name root) given
         '''
-        #print 'plot', mk
         
         assert sigmapi in ('sigma', 'pi'), "=== sigmapi keyword must be 'sigma' or 'pi'"
 
@@ -790,7 +789,6 @@ class TensorScatteringClass():
             Ixs, Ixp, Itot, polchar = Ips, Ipp, Ips + Ipp, '\pi'
 
         plt.figure(); 
-        #plt.hold(True);
         plt.plot(psideg, Itot, 'k',label='$\sigma$ Total',linewidth=2.0);
         plt.plot(psideg, Ixs, 'r',label='$'+polchar+'\sigma$',linewidth=2.0);
         plt.plot(psideg, Ixp, 'b',label='$'+polchar+'\pi$',linewidth=2.0); 
@@ -799,7 +797,7 @@ class TensorScatteringClass():
             plt.ylim([0,1])
 
         if savefile != None:
-            plt.savefig('%s '+sigmapi+'.pdf' % savefile)
+            plt.savefig(('%s '+sigmapi+'.pdf') % savefile)
 
     def PlotIntensityVsPolarizationAnalyserRotation(self, process, lam, hkl, hkln, psideg, pol_eta_deg, pol_th_deg = 45, stokesvec_swl = [0, 0, 1], K = None, Time = None, Parity = None, mk = None, lk = None, sk = None, savefile=None):
         '''
@@ -843,7 +841,7 @@ class TensorScatteringClass():
     def scalar_contract(self, X, T):
         if len(X)!=len(T):
             raise ValueError("Can't form scalar contraction of tensors with different rank")
-        K=len(X)/2
+        K=int(len(X)/2)
         scalar=0
         for kk in range(len(X)):
             q=kk-K
@@ -852,13 +850,13 @@ class TensorScatteringClass():
 
     def print_tensors(self):
         np.set_printoptions(precision=3, suppress=True)
-        print '\nTensor components\n',\
+        print('\nTensor components\n',\
             self.fmt % 'Crystal (spherical)', self.Ts_crystal,\
             self.fmt % 'Atom (spherical)', self.Ts_atom,\
             self.fmt % 'Struct. factor (spherical)', self.Fs,\
             '\n\nCrystal (Cartesian):\n\n', self.Tc_crystal,\
             '\n\nAtom (Cartesian):\n\n', self.Tc_atom,\
-            '\n\nStruct. factor (Cartesian):\n\n', self.Fc, '\n'
+            '\n\nStruct. factor (Cartesian):\n\n', self.Fc, '\n')
 
     
     def cart_to_spherical_tensor(self, Tc):
@@ -876,7 +874,7 @@ class TensorScatteringClass():
         #Default time (T) sym +1; no default for parity (P)
         Tnew=Tensor*0.0
         for sym in symop_list:
-            tsign=T**((1-sym[1])/2) #sign change of time-odd tensor under time inversion
+            tsign=T**int((1-sym[1])/2) #sign change of time-odd tensor under time inversion
             Tnew+=self.transform_cart(Tensor, self.crystal_to_cart_operator(sym[0], Bmat),P)*tsign
         return Tnew
 
@@ -901,7 +899,7 @@ class TensorScatteringClass():
             mat=sym[0]
             vec=sym[1]
             time=sym[2]
-            tsign=T**((1-time)/2) #sign change of time-odd tensor under time inversion
+            tsign=T**int((1-time)/2) #sign change of time-odd tensor under time inversion
             newR=np.dot(mat, R)+vec
             phase=np.exp(np.pi*2.j * np.dot(hkl, newR))
             newbit=self.transform_cart(Tensor, self.crystal_to_cart_operator(mat, Bmat),P)*phase*tsign
@@ -918,13 +916,13 @@ class TensorScatteringClass():
         if P==0:
             Sfac=1
         elif P==1 or P==-1:
-            Sfac=det(S)**((3+P*(-1)**k)/2)
+            Sfac=det(S)**int((3+P*(-1)**k)/2)
         else:
             raise ValueError('Parity should be +1 (even), -1 (odd) or 0 (ignored)')
             
         ##### delete next two lines - diagnostics only
         if Sfac==-1:
-            print "===Applying sign change for pseudotensor transormation"
+            print("===Applying sign change for pseudotensor transormation")
         
         tnew=T*0.0;
         if k==0:
@@ -993,7 +991,7 @@ class TensorScatteringClass():
         Snew=np.dot(inv(B.T),  np.dot(S, B.T));
         return Snew
     
-    def StoneSphericalToCartConversionCoefs(self, K,Calc=True,k=-1j):
+    def StoneSphericalToCartConversionCoefs(self, K, Calc=True, k=-1j):
         #Condon&Shortley phase convention (k=-i in Stone's paper)
         #from FortranForm (No - CForm?) First List->array, del other lists,spaces, extra bracket around first level
         #If Calc==False then use these expressions from Mathematica, else calculate them numerically
@@ -1029,7 +1027,7 @@ class TensorScatteringClass():
         e.g. StoneCoefficients([1,2,3]) returns conversion coefficients for K=3, coupling with 
         maximum rank and Condon & Shortley (default) phase convention
         Example:     C123=StoneCoefficients([1,2,3])    returns conversion matrix for coupling sequence 123 (K=3)
-                print lcontract(C123,3,[1,0,0,0,0,0,0]) returns table values for Q=-3
+                print(lcontract(C123,3,[1,0,0,0,0,0,0])) returns table values for Q=-3
         Numpy version converted from, Sympy version
         '''
         rt=2**0.5               #sqrt(2)
@@ -1050,7 +1048,7 @@ class TensorScatteringClass():
                 #diag('stone coef main loop',['C','J','C1','Cnew'],locals()) 
         return C
        
-    def StoneCoupleVector(self, Cold,Knew,C1):
+    def StoneCoupleVector(self, Cold, Knew, C1):
         '''
         StoneCoupleVector(Cold,Knew,C1)
         couple Stone coefficients Cold to a new vector to make coefficient for spherocal tensor of rank Knew
@@ -1064,8 +1062,8 @@ class TensorScatteringClass():
         newshape=len(oldshape)*[3]+[2*Knew+1]                    #shape of new conversion matrix
         Cnew=np.zeros(newshape, dtype=complex)                            #empty matrix for new conversion matrix
         oldindlist=self.indexlist(oldshape)                       #list of all indices for old matrix
-        jn=(newshape[-1]-1)/2
-        jn_=(oldshape[-1]-1)/2                            #j_{n-1} from Stone
+        jn=int((newshape[-1]-1)/2)
+        jn_=int((oldshape[-1]-1)/2)                            #j_{n-1} from Stone
         for ind in oldindlist:                            #loop through indices
             ind=list(ind);                  #make sure its a list
             mp=ind[-1]-jn_
@@ -1075,7 +1073,7 @@ class TensorScatteringClass():
                     m=mp+mpp                    #definitions follow Stone...
                     vectorconversion=C1[an][mpp+1]            #required element of vector conversion matrix 
                     cj=self.ClebschGordan(jn_,1,mp,mpp,jn,m)
-                    element=Cold[tuple(ind)]        #required element of old conversion matrix 
+                    element=Cold[tuple(ind)]        #required element of old conversion matrix
                     newind=ind[:-1]+[an]+[m+jn]            #index for new matrix
                     newelement=Cnew[tuple(newind)]    #element of new matrix
                     newelement+=element*vectorconversion*cj        #add in new bit
@@ -1101,7 +1099,7 @@ class TensorScatteringClass():
     
         for count in range(totalelements):        #loop through each element (flat index)
             for i in range(lenshape-1,-1,-1):    #loop through indices in reverse order
-                indlist[i]=(count/multiplicity[i])%shape[i]    
+                indlist[i]=(count//multiplicity[i])%shape[i]    
             indlistlist+=[np.copy(indlist)]
         return indlistlist    
 
@@ -1119,7 +1117,7 @@ class TensorScatteringClass():
         j1=float(j1); j2=float(j2); m1=float(m1); m2=float(m2); J=float(J); M=float(M);
         if not M==(m1+m2) or J>(j1+j2) or J<abs(j1-j2) or J<0 or abs(m1)>j1 or abs(m2)>j2 or abs(M)>J:
             if warn:
-                print 'Warning: Unphysical Clebsch-Gordan coefficient (j1,j2,m1,m2,J,M)='+str((j1,j2,m1,m2,J,M))
+                print('Warning: Unphysical Clebsch-Gordan coefficient (j1,j2,m1,m2,J,M)='+str((j1,j2,m1,m2,J,M)))
             return 0
     
         c1 = np.sqrt((2*J+1) * factorial(J+j1-j2) * factorial(J-j1+j2) * \
@@ -1143,13 +1141,12 @@ class TensorScatteringClass():
                     break
                 prod *= factorial(arg)
             if use:
-                #print k
                 c3 += (-1)**k/prod
         return c1*c2*c3
 
     
     def spherical_to_cart_tensor(self, Ts):
-        K=(len(Ts)-1)/2; #spherical tensor rank
+        K=int((len(Ts)-1)/2); #spherical tensor rank
         C=self.StoneSphericalToCartConversionCoefs(K).conjugate()
         Tc=C[0]*0.0;    #array of zeros
         for kk in range(-K, K+1):
@@ -1238,11 +1235,11 @@ class TensorScatteringClass():
         else:
             pass
             #investigate this...
-            #print'=== Warning: sum of phases is compex. This was not np.expected (see below). Maybe its OK - need to check:\n',sum_phases
+            #print('=== Warning: sum of phases is compex. This was not np.expected (see below). Maybe its OK - need to check:\n',sum_phases)
         if abs(sum_phases[0])>tol:
             sum_phases=np.array(sum_phases); sum_phases=sum_phases/sum_phases[0] #normalize to first (identity)
         else:
-            print '=== Warning: the phase sum for first (identity) operator is close to zero. This was not expected'
+            print('=== Warning: the phase sum for first (identity) operator is close to zero. This was not expected')
     
         txtyn=['Yes','Invalid value', 'No', 'Invalid value']; txtoe=['Even', 'Odd', 'Either', 'Either']; 
         outstr = \
@@ -1398,7 +1395,7 @@ class TensorScatteringClass():
             if np.all(abs(G[ind][0]-np.eye(3))<tol) and np.all(abs(G[ind][1]-np.zeros(3))<tol) and abs(G[ind][2]-1)<tol:
                 eye_index=ind
         if eye_index !=0:
-            print '=== Warning: Identity not first element'
+            print('=== Warning: Identity not first element')
         for S1 in G:
             for S2 in G:
                 M3=np.dot(S1[0], S2[0])
@@ -1409,9 +1406,9 @@ class TensorScatteringClass():
                     if np.all(abs(M3-S3[0])<tol) and np.all(abs(V3-self.firstCell(S3[1]))<tol) and abs(T3-S3[2])<tol:
                         n+=1
                 if n!=1:
-                    print '=== Warning: Not a group!'
-                    print '=== There should be one occurence of the following symmetry operator but were %i' % n
-                    print M3, V3, T3, '\n=== Derived from\n', S1, '\n=== and\n', S2
+                    print('=== Warning: Not a group!')
+                    print('=== There should be one occurence of the following symmetry operator but were %i' % n)
+                    print(M3, V3, T3, '\n=== Derived from\n', S1, '\n=== and\n', S2)
                     return False
         return True
     
@@ -1433,13 +1430,6 @@ class TensorScatteringClassMagrotExtension(TensorScatteringClass):
         _mk, _sk, _lk = deepcopy(mk), deepcopy(sk), deepcopy(lk)
         
         
-        #test
-        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
-        #print '_Iss', _Iss
-        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
-        #print '_Iss', _Iss
-        #print 'mk, sk, lk', mk, sk, lk
-        
         for rot in magrot:
             m = rot*np.pi/180
             sm, cm = np.sin(m), np.cos(m)
@@ -1458,14 +1448,6 @@ class TensorScatteringClassMagrotExtension(TensorScatteringClass):
             Ipp+=[_Ipp]
         Iss, Isp, Ips, Ipp = np.array(Iss), np.array(Isp), np.array(Ips), np.array(Ipp)
 
-        #print 'rotmat',  rotmat
-        #print '_sk',  _sk,
-        #print 'sk',   sk
-
-        #_Iss, _Isp, _Ips, _Ipp = self.CalculateIntensityInPolarizationChannels(process, lam, hkl, hkln, psideg=psideg, K=K, Time=Time, Parity=Parity, mk=mk, lk=lk, sk=sk)
-        #print '_Iss', _Iss
-        #print 'mk, sk, lk', mk, sk, lk
-        #print Iss.shape, Isp.shape, Ips.shape, Ipp.shape, magrot.shape
         
         #sig-sig, sig-pi, sig-total
         titlestr = process+' hkl=[%.1f, %.1f, %.1f]   $\psi_0$=[%.1f, %.1f, %.1f]' % (tuple(hkl)+tuple(hkln)) 

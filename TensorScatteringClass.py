@@ -1,9 +1,3 @@
-# make python3 compatible
-# check divides - done (?)
-#check range - ok no change
-# check prints
-
-
 import sys, pprint
 from copy import deepcopy
 from numpy.linalg import inv
@@ -22,6 +16,9 @@ except:
 class TensorScatteringClass():  
     '''
     Python class for resonant tensor scattering.
+
+    To run test with supplied CIF file in ipython (sometimes need to repeat for plot): %run TensorScatteringClass
+
     While this currently has limited capability for magnetic systems, magnetic symmetry operators are used throughout
     If no Site keyword arg supplied then available sites will be displayed before exiting
     Useful methods:
@@ -41,7 +38,7 @@ class TensorScatteringClass():
         pglist
         crystalpglist
         Ts_crystal, Ts_atom, Fs (spherical tensors)
-        Tc_crystal, Tc_atom, Fc (spherical tensors) 
+        Tc_crystal, Tc_atom, Fc (spherical tensors)
         
     '''
 
@@ -1412,6 +1409,12 @@ class TensorScatteringClass():
                     return False
         return True
     
+
+if __name__ == '__main__':
+        import TensorScatteringClass as ten
+        t=ten.TensorScatteringClass(CIFfile='ZnO Kisi et al icsd_67454.cif', Site='Zn1')
+        t.PlotIntensityInPolarizationChannels('E1E2', lam=12.4/9.659, hkl=np.array([1,1,5]), hkln=np.array([1,0,0]), K=3, Time=1, Parity=-1, mk=None, sk=None, sigmapi='sigma')
+        t.print_tensors()
     
     
 class TensorScatteringClassMagrotExtension(TensorScatteringClass):

@@ -2,7 +2,7 @@ import sys, pprint
 from copy import deepcopy
 from numpy.linalg import inv
 from numpy.random import rand
-from scipy.misc import factorial
+from scipy.special import factorial
 import numpy as np
 from numpy.linalg import det, norm
 import matplotlib.pyplot as plt

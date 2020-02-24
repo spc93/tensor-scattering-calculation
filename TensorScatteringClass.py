@@ -793,6 +793,7 @@ class TensorScatteringClass():
         if max(abs(Itot)) < 1e-20:
             plt.ylim([0,1])
 
+        plt.show()
         if savefile != None:
             plt.savefig(('%s '+sigmapi+'.pdf') % savefile)
 
@@ -811,7 +812,7 @@ class TensorScatteringClass():
         plt.legend(loc='best'); plt.ylabel('Intensity (aribtrary units)'); plt.axis('tight'); plt.xlabel('$\eta$ (degrees)'); plt.title(titlestr); plt.grid(1)
         if max(abs(I_pol)) < 1e-20:
             plt.ylim([0,1])
-
+        plt.show()
         if savefile != None:
             plt.savefig('%s '+etascan+'.pdf' % savefile)
 
@@ -1414,6 +1415,7 @@ if __name__ == '__main__':
         import TensorScatteringClass as ten
         t=ten.TensorScatteringClass(CIFfile='ZnO Kisi et al icsd_67454.cif', Site='Zn1')
         t.PlotIntensityInPolarizationChannels('E1E2', lam=12.4/9.659, hkl=np.array([1,1,5]), hkln=np.array([1,0,0]), K=3, Time=1, Parity=-1, mk=None, sk=None, sigmapi='sigma')
+        plt.show()
         t.print_tensors()
     
     
@@ -1469,6 +1471,7 @@ class TensorScatteringClassMagrotExtension(TensorScatteringClass):
         if max(abs(Itot)) < 1e-20:
             plt.ylim([0,1])
 
+        plt.show() 
         if savefile != None:
             plt.savefig('%s '+sigmapi+'.pdf' % savefile)
 

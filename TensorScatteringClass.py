@@ -1,3 +1,6 @@
+#sym from sg as alternative; keyword argument lattice or lattice = [1, 1, 1, 90, 90, 90]
+#check lattice not used in symmetry calculations (or it will have to be consistent with the space group)
+
 import sys, pprint
 from copy import deepcopy
 from numpy.linalg import inv
@@ -6,10 +9,6 @@ from scipy.special import factorial
 import numpy as np
 from numpy.linalg import det, norm
 import matplotlib.pyplot as plt
-try:
-    import CifFile
-except:
-    print("=== You need to install the PyCifRW module and add it to the Python path.\n=== Use pip install PyCifRW or visit https://pypi.org/project/PyCifRW/")
 #sys.path.append('/home/spc93/python/PyCifRW-3.1.2')
 #sys.path.append('/media/DCF0769CF0767D18/python/PyCifRW-3.1.2')
 
@@ -42,36 +41,22 @@ class TensorScatteringClass():
         
     '''
 
-
-
-    def __init__(self, CIFfile=None, Site=None, TimeEven=False):
+    def __init__(self, CIFfile=None, Site=None, spacegroup_number = None, wyckoff_letter = None, lattice = None, TimeEven=False):
         self.tensortypes = ['E1E1','E1E2','E2E2'] # supported tensor types
         self.processes = self.tensortypes+['E1E1mag','NonResMag'] # processes list includes magnetic scattering (not treated in tensor framework)
         self.Fs = None   #placeholder for spherical scattering tensor (if defined)
-        
-        if CIFfile==None:
-            raise ValueError('=== Must give CIFfile keyword argument')
-        self.CIFfile = CIFfile
-        self.Site = Site
-        self.cif_obj = CifFile.CifFile(self.CIFfile)
-        firstkey = self.cif_obj.keys()[0]; cb = self.cifblock=self.cif_obj[firstkey]
-        self.lattice = [float(cb['_cell_length_a'].partition('(')[0]), float(cb['_cell_length_b'].partition('(')[0]), float(cb['_cell_length_c'].partition('(')[0]), float(cb['_cell_angle_alpha'].partition('(')[0]), float(cb['_cell_angle_beta'].partition('(')[0]), float(cb['_cell_angle_gamma'].partition('(')[0])]
-        self.all_labels=', '.join(cb['_atom_site_label'])
-        
-        try:
-            self.atom_index = cb['_atom_site_label'].index(Site)
-        except:
-            print("=== Error: site keyword string must be in the atomic site list: " + self.all_labels)
-            return
-        
-        #self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index]), float(cb['_atom_site_fract_y'][self.atom_index]), float(cb['_atom_site_fract_z'][self.atom_index])])
-        #allow for error in brackets in cif file entry
-        self.sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_y'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_z'][self.atom_index].split('(')[0]) ])
-
-        try:
-            self.symxyz=cb['_symmetry_equiv_pos_as_xyz']
-        except:
-            self.symxyz=cb['_space_group_symop_operation_xyz'] #assume this is full group, not just generators
+         
+        if not CIFfile == None:
+            (self.symxyz, self.sitevec, self.Site, self.lattice) = self.symInfoFromCifFile(CIFfile, Site)
+        elif not spacegroup_number == None:
+            (self.symxyz, self.sitevec, self.Site) = self.symInfoFromSpacegroupAndWyckoff(spacegroup_number, wyckoff_letter)
+        else:
+            raise ValueError('=== Must specify either CIF file and site label or Spacegroup number and Wyckoff letter')
+        if not lattice == None:
+            self.lattice = lattice  # use lattice parameters if supplied
+        elif CIFfile == None:       # if not supplied and no CIF file then use default lattice
+            self.lattice = [0.5, 0.5, 0.5, 90, 90, 90]
+                
 
         self.sglist=self.spacegroup_list_from_genpos_list(self.symxyz)
         
@@ -86,7 +71,84 @@ class TensorScatteringClass():
         
         self.pglist= self.site_sym(self.sglist, self.sitevec)   #point group of site
         self.crystalpglist = self.crystal_point_sym(self.sglist)
+        
+        if CIFfile == None:
+            self.CIFfile = 'Spacegroup # %i' % spacegroup_number
+            self.all_labels = ''
+        else:
+            self.CIFfile = CIFfile
+        
+        
         print(self.__repr__())
+        
+
+                
+
+    def symInfoFromSpacegroupAndWyckoff(self, sg_num, wyck_letter, site = None):
+        '''
+        Get symxyz (general positions as strings from spacegroup and Wyckoff letter
+        returns site after substituting either given x, y, z values or random numbers
+        Requires CCTBX package
+        '''
+        import cctbx.sgtbx as sg
+    
+        sgi = sg.space_group_info(sg_num)
+        sg = sgi.group()
+        w = sgi.wyckoff_table()
+        
+        all_letters = list([w.position(i).letter() for i in range(w.size())])
+        
+        if wyck_letter in all_letters:
+            opxyz = str(w.position(wyck_letter).special_op()) # generic xyz string for site
+        else:
+            print('=== Invalid Wyckoff letter for spacegroup. Valid letters:', all_letters)
+            raise(ValueError)
+    
+        opxyz = opxyz.replace('/','./') # fix for Python 2.x int devide - not needed for Python 3
+    
+        if not site == None:        #use random values for x,y,z if not specified
+            x, y, z = site
+        else:
+            x, y, z = rand(), rand(), rand()
+    
+        sitevec = np.array(eval(opxyz)) # numerical array for site
+        symxyz = [str(s.as_xyz()) for s in sg.all_ops()]    # all sg ops as xyz list
+        sitestr = '%s %s' % (str(w.position(wyck_letter).multiplicity()), wyck_letter) 
+    
+        return (symxyz, sitevec, sitestr)
+
+
+    def symInfoFromCifFile(self, CIFfile, Site):
+        try:
+            import CifFile
+        except:
+            print("=== You need to install the PyCifRW module and add it to the Python path.\n=== Use pip install PyCifRW or visit https://pypi.org/project/PyCifRW/")
+
+        self.CIFfile = CIFfile
+        self.Site = Site
+        self.cif_obj = CifFile.CifFile(self.CIFfile)
+        firstkey = self.cif_obj.keys()[0]; cb = self.cifblock=self.cif_obj[firstkey]
+        lattice = [float(cb['_cell_length_a'].partition('(')[0]), float(cb['_cell_length_b'].partition('(')[0]), float(cb['_cell_length_c'].partition('(')[0]), float(cb['_cell_angle_alpha'].partition('(')[0]), float(cb['_cell_angle_beta'].partition('(')[0]), float(cb['_cell_angle_gamma'].partition('(')[0])]
+        self.all_labels=', '.join(cb['_atom_site_label'])
+        
+        try:
+            self.atom_index = cb['_atom_site_label'].index(Site)
+        except:
+            print("=== Error: site keyword string must be in the atomic site list: " + self.all_labels)
+            return
+        
+        sitevec = np.array([float(cb['_atom_site_fract_x'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_y'][self.atom_index].split('(')[0]), float(cb['_atom_site_fract_z'][self.atom_index].split('(')[0]) ])
+
+        try:
+            symxyz=cb['_symmetry_equiv_pos_as_xyz']
+        except:
+            symxyz=cb['_space_group_symop_operation_xyz'] #assume this is full group, not just generators
+
+        return (symxyz, sitevec, Site, lattice)
+
+
+
+
                 
     def __repr__(self):
         if self.Site==None:
@@ -1413,10 +1475,30 @@ class TensorScatteringClass():
 
 if __name__ == '__main__':
         import TensorScatteringClass as ten
-        t=ten.TensorScatteringClass(CIFfile='ZnO Kisi et al icsd_67454.cif', Site='Zn1')
-        t.PlotIntensityInPolarizationChannels('E1E2', lam=12.4/9.659, hkl=np.array([1,1,5]), hkln=np.array([1,0,0]), K=3, Time=1, Parity=-1, mk=None, sk=None, sigmapi='sigma')
-        plt.show()
-        t.print_tensors()
+
+        
+        print('=== Trying to load crystal data from CIF file...')
+        try:
+            t1=ten.TensorScatteringClass(CIFfile='ZnO Kisi et al icsd_67454.cif', Site='Zn1')
+            t1.PlotIntensityInPolarizationChannels('E1E2', lam=12.4/9.659, hkl=np.array([1,1,5]), hkln=np.array([1,0,0]), K=3, Time=1, Parity=-1, mk=None, sk=None, sigmapi='sigma')
+            plt.show()
+            t1.print_tensors()
+            print('=== Success!')
+        except:
+            print('=== Failed. Maybe CIF file is missing or CifFile module is not installed')
+            
+        print('=== Trying to load crystal data using CCTBX module...')
+        try:
+            t2=ten.TensorScatteringClass(spacegroup_number = 186, wyckoff_letter = 'b', lattice = [3.25, 3.25, 5.21, 90, 90, 120])
+            t2.PlotIntensityInPolarizationChannels('E1E2', lam=12.4/9.659, hkl=np.array([1,1,5]), hkln=np.array([1,0,0]), K=3, Time=1, Parity=-1, mk=None, sk=None, sigmapi='sigma')
+            plt.show()
+            t2.print_tensors()
+            print('=== Success!')
+        except:
+            print('=== Failed. Maybe CCTBX module is not installed')
+        
+
+
     
     
 class TensorScatteringClassMagrotExtension(TensorScatteringClass):

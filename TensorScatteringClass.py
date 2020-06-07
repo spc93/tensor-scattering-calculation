@@ -1217,20 +1217,22 @@ class TensorScatteringClass():
         #analyse symmetry of any possible structure factor (mainly for information)
         #returns [sym_phases, gen_scalar_allowed, site_scalar_allowed, tensor_allowed, Psym, Tsym, PTsym]
         tol=1e-6
-        inv_mat=np.array([[-1.0,0.0,0.0],[0.0,-1.0,0.0],[0.0,0.0,-1.0]]); #inversion operator
-        identity_mat=np.array([[1.0,0.0,0.0],[0.0,1.0,0.0],[0.0,0.0,1.0]]); #identity operator
-        identy_phase=np.exp(np.pi*2.j * np.dot(hkl, R)); #phase for initial site vector
+        identity_mat = np.eye(3)
+        inv_mat = -np.eye(3)    
+
         sym_phases=[];      #list of  symmetry operators (matrices) and the set of phases. Start with empty list.
         Rgen=rand(3);      #use random number to simulate general position to identify spacegroup forbidden reflections
         sum_phase_all=0;    #sum of all phases for site (to get scalar structure factor for site)
         sum_phase_gen=0;    #sum of phases for geneal (random) position
+        self.allR = []      #all atomic positions (for diagnostic)
         for sym in spacegroup_list:
             mat=sym[0]
             vec=sym[1]
             time=sym[2]
             newR=np.dot(mat, R)+vec
+            self.allR += [self.firstCell(newR)] # make list of sites, mapped to first cell (for diagnostic)
             newRgen=np.dot(mat, Rgen)+vec
-            phase=np.exp(np.pi*2.j * np.dot(hkl, newR))/identy_phase    #change phases so first one is unity
+            phase=np.exp(np.pi*2.j * np.dot(hkl, newR))          
             sum_phase_all+=np.exp(np.pi*2.j * np.dot(hkl, newR))              #add new phase for site to sum
             sum_phase_gen+=np.exp(np.pi*2.j * np.dot(hkl, newRgen))              #add new phase for general (random) position to sum
             newsym=1;
@@ -1261,8 +1263,7 @@ class TensorScatteringClass():
         for sym_phase in sym_phases:
             sum_phases+=[sum(sym_phase[2])]
             sum_all_phases+=sum(sym_phase[2])                             #add all phases (if all zero then forbidden for scalar)
-            #if not np.allclose(sum(sym_phase[1]), 0, atol=tol):
-            if not np.allclose(sum(sym_phase[2]), 0, atol=tol): ########## fix bug - hangover from before T was added
+            if not np.allclose(sum(sym_phase[2]), 0, atol=tol):
                 tensor_allowed=1
             if np.allclose(sym_phase[0], identity_mat, atol=tol) and abs(sym_phase[1]-1)<tol:
                 sum_Pplus_Tplus+=sum(sym_phase[2])
@@ -1292,14 +1293,6 @@ class TensorScatteringClass():
         sum_phases=np.array(sum_phases)
         if np.allclose(sum_phases, sum_phases.real, atol=tol):
             sum_phases=np.real(sum_phases)
-        else:
-            pass
-            #investigate this...
-            #print('=== Warning: sum of phases is compex. This was not np.expected (see below). Maybe its OK - need to check:\n',sum_phases)
-        if abs(sum_phases[0])>tol:
-            sum_phases=np.array(sum_phases); sum_phases=sum_phases/sum_phases[0] #normalize to first (identity)
-        else:
-            print('=== Warning: the phase sum for first (identity) operator is close to zero. This was not expected')
     
         txtyn=['Yes','Invalid value', 'No', 'Invalid value']; txtoe=['Even', 'Odd', 'Either', 'Either']; 
         outstr = \

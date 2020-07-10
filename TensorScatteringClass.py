@@ -1,5 +1,14 @@
-#sym from sg as alternative; keyword argument lattice or lattice = [1, 1, 1, 90, 90, 90]
-#check lattice not used in symmetry calculations (or it will have to be consistent with the space group)
+#github comments
+#default wyckoff to 'a'
+#all_letters now attribute
+#now have glide_screw atribute and message to report presence of glide or screw operators
+
+
+
+
+
+
+
 
 import sys, pprint
 from copy import deepcopy
@@ -17,6 +26,8 @@ class TensorScatteringClass():
     Python class for resonant tensor scattering.
 
     To run test with supplied CIF file in ipython (sometimes need to repeat for plot): %run TensorScatteringClass
+    
+    
 
     While this currently has limited capability for magnetic systems, magnetic symmetry operators are used throughout
     If no Site keyword arg supplied then available sites will be displayed before exiting
@@ -40,11 +51,14 @@ class TensorScatteringClass():
         Tc_crystal, Tc_atom, Fc (spherical tensors)
         
     '''
-
-    def __init__(self, CIFfile=None, Site=None, spacegroup_number = None, wyckoff_letter = None, lattice = None, TimeEven=False):
+    
+    
+    def __init__(self, CIFfile=None, Site=None, spacegroup_number = None, wyckoff_letter = 'a', lattice = None, TimeEven=False, verbose = True):
         self.tensortypes = ['E1E1','E1E2','E2E2'] # supported tensor types
         self.processes = self.tensortypes+['E1E1mag','NonResMag'] # processes list includes magnetic scattering (not treated in tensor framework)
         self.Fs = None   #placeholder for spherical scattering tensor (if defined)
+        self.verbose = verbose
+        self.fmt='\n%28s:  '
          
         if not CIFfile == None:
             (self.symxyz, self.sitevec, self.Site, self.lattice) = self.symInfoFromCifFile(CIFfile, Site)
@@ -79,7 +93,8 @@ class TensorScatteringClass():
             self.CIFfile = CIFfile
         
         
-        print(self.__repr__())
+        if self.verbose: 
+            print(self.__repr__())
         
 
                 
@@ -96,15 +111,15 @@ class TensorScatteringClass():
         sg = sgi.group()
         w = sgi.wyckoff_table()
         
-        all_letters = list([w.position(i).letter() for i in range(w.size())])
+        self.all_letters = list([w.position(i).letter() for i in range(w.size())])
         
-        if wyck_letter in all_letters:
+        if wyck_letter in self.all_letters:
             opxyz = str(w.position(wyck_letter).special_op()) # generic xyz string for site
         else:
-            print('=== Invalid Wyckoff letter for spacegroup. Valid letters:', all_letters)
+            print('=== Invalid Wyckoff letter for spacegroup. Valid letters:', self.all_letters)
             raise(ValueError)
-    
-        opxyz = opxyz.replace('/','./') # fix for Python 2.x int devide - not needed for Python 3
+            
+        opxyz = opxyz.replace('/','./') # fix for Python 2.x int divide - not needed for Python 3
     
         if not site == None:        #use random values for x,y,z if not specified
             x, y, z = site
@@ -112,6 +127,7 @@ class TensorScatteringClass():
             x, y, z = rand(), rand(), rand()
     
         sitevec = np.array(eval(opxyz)) # numerical array for site
+        sitevec = self.firstCell(sitevec) # put in first unit cell
         symxyz = [str(s.as_xyz()) for s in sg.all_ops()]    # all sg ops as xyz list
         sitestr = '%s %s' % (str(w.position(wyck_letter).multiplicity()), wyck_letter) 
     
@@ -153,7 +169,7 @@ class TensorScatteringClass():
     def __repr__(self):
         if self.Site==None:
             return "=== Atomic site labels: \n" + self.all_labels + "\n=== Use Site keyword to specific a site, e.g. Site = 'Fe1'"
-        self.fmt='\n%28s:  '
+        #self.fmt='\n%28s:  ' ########## delete
             
         return '\nCrystal properties\n' \
         + (self.fmt+'%s') % ('CIF file',self.CIFfile) \
@@ -178,10 +194,11 @@ class TensorScatteringClass():
         txtoe=['Even', 'Odd', 'Either', 'Either'];
         
         outstr = '\nTensor properties\n'\
-            +(self.fmt+'%s') % ('Required parity', self.msg(self.Parity, txtoe)) \
-            +(self.fmt+'%s') % ('Required time sym.', self.msg(self.Time, txtoe)) \
+            + (self.fmt+'%s') % ('Required parity', self.msg(self.Parity, txtoe)) \
+            + (self.fmt+'%s') % ('Required time sym.', self.msg(self.Time, txtoe)) \
         
         outstr += self.SF_symmetry(self.sitevec, self.hkl, self.sglist)
+        outstr += (self.fmt+'%r') % ('Glide or screw', self.glide_screw)
         
         #populate tensor with random complex numbers that satisfy the requirements for a Hermitian tensor
         self.Ts=list(np.zeros(2*self.K+1))
@@ -200,7 +217,8 @@ class TensorScatteringClass():
         self.Ts_crystal=self.norm_array(self.cart_to_spherical_tensor(self.Tc_crystal));    #crystal spherical tensor
         self.Fs=self.norm_array(self.cart_to_spherical_tensor(self.Fc));    #SF spherical tensor
 
-        print(outstr)
+        if self.verbose:
+            print(outstr)
         return
 
     def calcXrayVectors(self, lam, psi, hkl, hkln):
@@ -981,7 +999,7 @@ class TensorScatteringClass():
             raise ValueError('Parity should be +1 (even), -1 (odd) or 0 (ignored)')
             
         ##### delete next two lines - diagnostics only
-        if Sfac==-1:
+        if Sfac==-1 and self.verbose:
             print("===Applying sign change for pseudotensor transormation")
         
         tnew=T*0.0;
@@ -1225,10 +1243,14 @@ class TensorScatteringClass():
         sum_phase_all=0;    #sum of all phases for site (to get scalar structure factor for site)
         sum_phase_gen=0;    #sum of phases for geneal (random) position
         self.allR = []      #all atomic positions (for diagnostic)
+        self.glide_screw = False # change to True if there is a sym op that combines rotation/reflection with translation
         for sym in spacegroup_list:
             mat=sym[0]
             vec=sym[1]
             time=sym[2]
+            if not np.allclose(mat, identity_mat, atol=tol) and not np.allclose(mat, inv_mat, atol=tol) \
+                and not np.allclose(vec, np.zeros((1,3)), atol=tol):
+                self.glide_screw = True
             newR=np.dot(mat, R)+vec
             self.allR += [self.firstCell(newR)] # make list of sites, mapped to first cell (for diagnostic)
             newRgen=np.dot(mat, Rgen)+vec
